@@ -3,6 +3,18 @@ import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
+
+download_list = [
+    'punkt_tab',    # Required for word_tokenize and sent_tokenize
+    'stopwords',    # Required for removing stop words
+    'wordnet',      # Required for lemmatization
+    'omw-1.4',      # Often required alongside wordnet in newer NLTK versions
+    'averaged_perceptron_tagger_eng' # Often needed if your code does Part-of-Speech tagging
+]
+
+for package in download_list:
+    nltk.download(package, quiet=True)
+    
 try:
     import enchant
     english_dict = enchant.Dict("en_US")
