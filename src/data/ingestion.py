@@ -34,9 +34,15 @@ def download_msctd():
     for split in ['train', 'test', 'dev']:
         split_dir = os.path.join("dataset", split)
         os.makedirs(split_dir, exist_ok=True)
-        # Simplified moving logic, to be tuned based on exact unzipped names
+        # Move image folders mapping
         run_cmd(f"mv *{split}* {split_dir}/ 2>/dev/null || true")
-    
+        # Properly structure text maps from the MSCTD GitHub repository core directory
+        for kind in ['english', 'sentiment']:
+            src_path = os.path.join("MSCTD_data", "Main_Data", f"{kind}_{split}.txt")
+            if os.path.exists(src_path):
+                import shutil
+                shutil.copy(src_path, split_dir)
+                
     os.chdir(src.config.DATA_DIR)
 
 def download_instany():
