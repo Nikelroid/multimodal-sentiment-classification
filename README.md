@@ -7,13 +7,15 @@
 ![Transformers](https://img.shields.io/badge/Transformers-4.0+-yellow.svg)
 ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-1.0+-orange.svg)
 
-![concept image](multimodal.png)
+
 
 
 ## Description
 This project implements a deep learning pipeline for **Multi-Modal Sentiment Analysis**, specifically designed to process and classify sentiment in image-text conversations. Built using **PyTorch**, the system leverages state-of-the-art models to analyze both visual and textual data. It utilizes **EfficientNet** for image feature extraction and **BERT** for textual embeddings, fusing these modalities to predict sentiments (Positive, Negative, Neutral).
 
 The project is structured into distinct phases, evolving from basic data handling to complex multimodal fusion strategies, making it a comprehensive resource for understanding how to integrate Natural Language Processing (NLP) and Computer Vision (CV).
+
+![concept image](multimodal.png)
 
 ## Features
 * **Robust Data Handling:** Custom PyTorch DataLoaders designed for the MSCTD (Multi-Modal Sentiment Classification and Time Dynamics) dataset.
