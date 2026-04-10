@@ -23,9 +23,15 @@ conda activate multimodal_env
 echo "Active environment:"
 conda info --envs | grep '*'
 
+DATA_PATH="data"
+DATASET_NAME="MSCTD"
+MODEL="roberta-base"
+BATCH_SIZE=32
+TASK="classification"
+
 # Step 1: Data Ingestion
 echo "Running data ingestion..."
-python src/data/ingestion.py
+python src/data/ingestion.py --data_dir ${DATA_PATH}
 
 # Step 2: Preprocessing
 echo "Running data preprocessing..."
@@ -37,10 +43,10 @@ python src/pipelines/pretrain.py
 
 # Step 4: Final Multimodal Training
 echo "Running main training loop..."
-python src/pipelines/train.py
+python src/pipelines/train.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --batch_size ${BATCH_SIZE}
 
 # Step 5: Post-training analysis
 echo "Running post-training analysis..."
-python src/pipelines/post_train.py
+python src/pipelines/evaluate.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --batch_size ${BATCH_SIZE}
 
 echo "Pipeline completed successfully."

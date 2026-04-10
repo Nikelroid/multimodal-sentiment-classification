@@ -1,9 +1,12 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import os
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoImageProcessor
-from src.config import DATA_DIR, MSCTD_DIR, BATCH_SIZE, MAX_EPOCHS, LEARNING_RATE, TEXT_MODEL_NAME, VISION_BACKBONE_NAME
+import src.config
 from src.data.dataloaders import MultimodalDataset
 from src.data.preprocess import sent_preprocess
 from src.models.multimodal import MultimodalFusionNet
@@ -29,25 +32,25 @@ def collate_fn(batch, tokenizer, feature_extractor):
 
 def train():
     wandb.init(project="multimodal-sentiment-classification", config={
-        "learning_rate": LEARNING_RATE,
-        "epochs": MAX_EPOCHS,
-        "batch_size": BATCH_SIZE,
-        "text_model": TEXT_MODEL_NAME,
-        "vision_model": VISION_BACKBONE_NAME
+        "learning_rate": src.config.LEARNING_RATE,
+        "epochs": src.config.MAX_EPOCHS,
+        "batch_size": src.config.BATCH_SIZE,
+        "text_model": src.config.TEXT_MODEL_NAME,
+        "vision_model": src.config.VISION_BACKBONE_NAME
     })
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
-    feature_extractor = AutoImageProcessor.from_pretrained(VISION_BACKBONE_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(src.config.TEXT_MODEL_NAME)
+    feature_extractor = AutoImageProcessor.from_pretrained(src.config.VISION_BACKBONE_NAME)
 
     # Wrap collation
     collate = lambda b: collate_fn(b, tokenizer, feature_extractor)
 
     # Initialize Dataset
     train_dataset = MultimodalDataset(
-        dataset_dir=MSCTD_DIR,
+        dataset_dir=src.config.MSCTD_DIR,
         images_dir="dataset/train/train_ende",
         texts_file="dataset/train/english_train.txt",
         sentiments_file="dataset/train/sentiment_train.txt",
@@ -55,26 +58,26 @@ def train():
         audio_dir="AudioSample" # Will use blanks if not present
     )
     
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate, num_workers=2)
+    train_loader = DataLoader(train_dataset, batch_size=src.config.BATCH_SIZE, shuffle=True, collate_fn=collate, num_workers=2)
 
     model = MultimodalFusionNet(
-        text_model_name=TEXT_MODEL_NAME,
-        vit_model_name=VISION_BACKBONE_NAME,
+        text_model_name=src.config.TEXT_MODEL_NAME,
+        vit_model_name=src.config.VISION_BACKBONE_NAME,
         use_audio=True
     ).to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=src.config.LEARNING_RATE)
     criterion = nn.CrossEntropyLoss()
 
     best_loss = float('inf')
 
-    for epoch in range(MAX_EPOCHS):
+    for epoch in range(src.config.MAX_EPOCHS):
         model.train()
         total_loss = 0
         correct = 0
         total = 0
         
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{MAX_EPOCHS}")
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{src.config.MAX_EPOCHS}")
         for batch in pbar:
             optimizer.zero_grad()
             
@@ -109,5 +112,22 @@ def train():
 
     wandb.finish()
 
+
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task", type=str, default="classification", help="Task type")
+    parser.add_argument("--data_dir", type=str, default=None, help="Base data directory")
+    parser.add_argument("--dataset_name", type=str, default=None, help="Dataset name")
+    parser.add_argument("--model_name", type=str, default=None, help="Override text model name")
+    parser.add_argument("--batch_size", type=int, default=None, help="Batch size")
+    args = parser.parse_args()
+    
+    if args.data_dir:
+        src.config.DATA_DIR = args.data_dir
+    if args.model_name:
+        src.config.TEXT_MODEL_NAME = args.model_name
+    if args.batch_size:
+        src.config.BATCH_SIZE = args.batch_size
+        
     train()

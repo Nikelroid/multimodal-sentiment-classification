@@ -1,3 +1,6 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import torch
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
@@ -43,7 +46,25 @@ def log_metrics_wandb(acc, p, r, f1, cm):
     # but basic logs can suffice.
     print(f"Eval results - Acc: {acc}, F1: {f1}")
 
+
 if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task", type=str, default="classification", help="Task type")
+    parser.add_argument("--data_dir", type=str, default=None, help="Base data directory")
+    parser.add_argument("--dataset_name", type=str, default=None, help="Dataset name")
+    parser.add_argument("--model_name", type=str, default=None, help="Override text model name")
+    parser.add_argument("--batch_size", type=int, default=None, help="Batch size")
+    args = parser.parse_args()
+    
+    import src.config
+    if args.data_dir:
+        src.config.DATA_DIR = args.data_dir
+    if args.model_name:
+        src.config.TEXT_MODEL_NAME = args.model_name
+    if args.batch_size:
+        src.config.BATCH_SIZE = args.batch_size
+
     import os
     from torch.utils.data import DataLoader
     from transformers import AutoTokenizer, AutoImageProcessor
