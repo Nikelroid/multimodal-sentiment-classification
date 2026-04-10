@@ -23,7 +23,11 @@ def download_msctd():
     }
 
     for fname, file_id in urls.items():
-        if not os.path.exists(fname) and not os.path.exists(fname.replace('.zip', '')):
+        # Prevent redundant downloading if already extracted/moved
+        split_target = "train" if "train" in fname else ("test" if "test" in fname else "dev")
+        target_extracted = os.path.join("dataset", split_target, fname.replace('.zip', ''))
+        
+        if not os.path.exists(fname) and not os.path.exists(fname.replace('.zip', '')) and not os.path.exists(target_extracted):
             try:
                 run_cmd(f"gdown --id {file_id}")
                 run_cmd(f"unzip -qq {fname}")
