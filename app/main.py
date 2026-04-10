@@ -24,8 +24,8 @@ async def favicon():
     return HTMLResponse("")
 
 
-app.mount("/static", StaticFiles(directory="api_server/static"), name="static")
-templates = Jinja2Templates(directory="api_server/templates")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+templates = Jinja2Templates(directory="app/templates")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Loading models (this might take a few seconds)...")
