@@ -7,6 +7,8 @@
 ![Transformers](https://img.shields.io/badge/Transformers-4.0+-yellow.svg)
 ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-1.0+-orange.svg)
 
+![concept image](multimodal.jpg)
+
 
 ## Description
 This project implements a deep learning pipeline for **Multi-Modal Sentiment Analysis**, specifically designed to process and classify sentiment in image-text conversations. Built using **PyTorch**, the system leverages state-of-the-art models to analyze both visual and textual data. It utilizes **EfficientNet** for image feature extraction and **BERT** for textual embeddings, fusing these modalities to predict sentiments (Positive, Negative, Neutral).
