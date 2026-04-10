@@ -31,7 +31,9 @@ def collate_fn(batch, tokenizer, feature_extractor):
     }
 
 def train():
-    wandb.init(project="multimodal-sentiment-classification", config={
+    wandb.init(
+        entity="kelidari-usc",
+        project="multimodal-sentiment-analysis", config={
         "learning_rate": src.config.LEARNING_RATE,
         "epochs": src.config.MAX_EPOCHS,
         "batch_size": src.config.BATCH_SIZE,

@@ -20,7 +20,6 @@ def download_msctd():
     urls = {
         "train_ende.zip": "1GAZgPpTUBSfhne-Tp0GDkvSHuq6EMMbj",
         "test.zip": "1B9ZFmSTqfTMaqJ15nQDrRNLqBvo-B39W",
-        "dev.zip": "1F2Kx_N2r1VnB87C--a-17Z7O0K3s0O1Z" # Placeholder if dev is different
     }
 
     for fname, file_id in urls.items():
