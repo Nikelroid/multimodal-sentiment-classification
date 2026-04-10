@@ -5,6 +5,7 @@ import torch
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 import wandb
+from src.configs import config
 
 def evaluate_model(model, dataloader, device):
     model.eval()

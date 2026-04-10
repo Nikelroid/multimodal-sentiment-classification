@@ -5,7 +5,7 @@
 set -e
 
 echo "=========================================="
-echo " Starting CARC Environment Setup"
+echo " 1.Starting CARC Environment Setup"
 echo "=========================================="
 
 # 1. GitHub Token Validation safely prompted if not in session memory
@@ -40,7 +40,7 @@ else
 fi
 
 echo "=========================================="
-echo " Preparing Miniconda"
+echo " 2.Preparing Miniconda"
 echo "=========================================="
 
 export PATH="$HOME/miniconda3/bin:$HOME/miniconda/bin:$PATH"
@@ -67,7 +67,7 @@ fi
 
 
 echo "=========================================="
-echo " 5. Pre-Caching Models"
+echo " 3. Pre-Caching Models"
 echo "=========================================="
 echo "Downloading models on login node to prevent Slurm timeouts..."
 conda run -n $ENV_NAME python -c "
@@ -95,7 +95,7 @@ for m in models_aud:
 "
 
 echo "=========================================="
-echo " 6. Queueing Deployment"
+echo " 4. Queueing Deployment"
 echo "=========================================="
 
 echo "Initializing cluster background job scheduler..."
