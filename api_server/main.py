@@ -1,3 +1,10 @@
+import os
+import sys
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+# Add project root to path so 'src' is found
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,8 +19,13 @@ from src.config import TEXT_MODEL_NAME, VISION_BACKBONE_NAME
 
 app = FastAPI(title="Multimodal Sentiment Analysis")
 
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return HTMLResponse("")
+
+
+app.mount("/static", StaticFiles(directory="api_server/static"), name="static")
+templates = Jinja2Templates(directory="api_server/templates")
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Loading models (this might take a few seconds)...")
