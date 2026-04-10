@@ -23,9 +23,10 @@ conda activate multimodal_env
 echo "Active environment:"
 conda info --envs | grep '*'
 
-DATA_PATH="data"
+DATA_PATH="/scratch1/kelidari/multimodal_data"
 DATASET_NAME="MSCTD"
 MODEL="roberta-base"
+VISION_MODEL="google/vit-base-patch16-224-in21k"
 BATCH_SIZE=32
 TASK="classification"
 
@@ -43,10 +44,10 @@ python src/pipelines/pretrain.py
 
 # Step 4: Final Multimodal Training
 echo "Running main training loop..."
-python src/pipelines/train.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --batch_size ${BATCH_SIZE}
+python src/pipelines/train.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --vision_model ${VISION_MODEL} --batch_size ${BATCH_SIZE}
 
 # Step 5: Post-training analysis
 echo "Running post-training analysis..."
-python src/pipelines/evaluate.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --batch_size ${BATCH_SIZE}
+python src/pipelines/evaluate.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --vision_model ${VISION_MODEL} --batch_size ${BATCH_SIZE}
 
 echo "Pipeline completed successfully."
