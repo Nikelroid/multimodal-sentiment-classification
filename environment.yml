@@ -5,9 +5,9 @@ channels:
   - defaults
 dependencies:
   - python=3.9
-  - pytorch
-  - torchvision
-  - torchaudio
+  - pytorch>=2.6.0
+  - torchvision>=0.21.0
+  - torchaudio>=2.6.0
   - scikit-learn
   - pandas
   - numpy
