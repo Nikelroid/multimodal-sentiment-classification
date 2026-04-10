@@ -2,15 +2,15 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 import subprocess
-import src.config
+from src.configs import config
 
 def run_cmd(cmd):
     print(f"Running: {cmd}")
     subprocess.run(cmd, shell=True, check=True)
 
 def download_msctd():
-    os.makedirs(src.config.MSCTD_DIR, exist_ok=True)
-    os.chdir(src.config.MSCTD_DIR)
+    os.makedirs(config.data.msctd_dir, exist_ok=True)
+    os.chdir(config.data.msctd_dir)
 
     if not os.path.exists("MSCTD_data"):
         print("Cloning MSCTD repo for text labels...")
@@ -43,22 +43,22 @@ def download_msctd():
                 import shutil
                 shutil.copy(src_path, split_dir)
                 
-    os.chdir(src.config.DATA_DIR)
+    os.chdir(config.data.data_dir)
 
 def download_instany():
-    if not os.path.exists(src.config.INSTANY_DIR):
+    if not os.path.exists(config.data.instany_dir):
         print("Downloading InstaNY100K via Kaggle...")
-        os.makedirs(src.config.INSTANY_DIR, exist_ok=True)
-        os.chdir(src.config.INSTANY_DIR)
+        os.makedirs(config.data.instany_dir, exist_ok=True)
+        os.chdir(config.data.instany_dir)
         try:
             run_cmd("kaggle datasets download -d hsankesara/flickr-image-dataset")
             run_cmd("unzip -qq flickr-image-dataset.zip")
         except Exception as e:
             print(f"Warning: kaggle failure: {e}. Provide correct credentials.")
-        os.chdir(src.config.DATA_DIR)
+        os.chdir(config.data.data_dir)
 
 def download_audio_sample():
-    audio_dir = src.config.DATA_DIR / "AudioSample"
+    audio_dir = config.data.data_dir / "AudioSample"
     if not os.path.exists(audio_dir):
         print("Downloading small sample audio dataset for audio-multimodal testing...")
         os.makedirs(audio_dir, exist_ok=True)
@@ -69,22 +69,12 @@ def download_audio_sample():
             run_cmd("unzip -qq ravdess-emotional-speech-video.zip")
         except Exception as e:
             print("Audio dataset download skipped or failed.")
-        os.chdir(src.config.DATA_DIR)
+        os.chdir(config.data.data_dir)
 
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, default=None, help="Base data directory")
-    args = parser.parse_args()
-    
-    if args.data_dir:
-        from pathlib import Path
-        src.config.DATA_DIR = Path(args.data_dir)
-        src.config.MSCTD_DIR = src.config.DATA_DIR / "MSCTD"
-        src.config.INSTANY_DIR = src.config.DATA_DIR / "InstaNY100K"
-        
+    config.parse_cli_args()
     download_msctd()
     download_instany()
     download_audio_sample()

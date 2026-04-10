@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoImageProcessor
-import src.config
+from src.configs import config
 from src.data.dataloaders import MultimodalDataset
 from src.data.preprocess import sent_preprocess
 from src.models.multimodal import MultimodalFusionNet
@@ -34,25 +34,25 @@ def train():
     wandb.init(
         entity="kelidari-usc",
         project="multimodal-sentiment-analysis", config={
-        "learning_rate": src.config.LEARNING_RATE,
-        "epochs": src.config.MAX_EPOCHS,
-        "batch_size": src.config.BATCH_SIZE,
-        "text_model": src.config.TEXT_MODEL_NAME,
-        "vision_model": src.config.VISION_BACKBONE_NAME
+        "learning_rate": config.training.learning_rate,
+        "epochs": config.training.max_epochs,
+        "batch_size": config.training.batch_size,
+        "text_model": config.model.text_model_name,
+        "vision_model": config.model.vision_backbone_name
     })
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    tokenizer = AutoTokenizer.from_pretrained(src.config.TEXT_MODEL_NAME)
-    feature_extractor = AutoImageProcessor.from_pretrained(src.config.VISION_BACKBONE_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(config.model.text_model_name)
+    feature_extractor = AutoImageProcessor.from_pretrained(config.model.vision_backbone_name)
 
     # Wrap collation
     collate = lambda b: collate_fn(b, tokenizer, feature_extractor)
 
     # Initialize Dataset
     train_dataset = MultimodalDataset(
-        dataset_dir=src.config.MSCTD_DIR,
+        dataset_dir=config.data.msctd_dir,
         images_dir="dataset/train/train_ende",
         texts_file="dataset/train/english_train.txt",
         sentiments_file="dataset/train/sentiment_train.txt",
@@ -60,26 +60,26 @@ def train():
         audio_dir="AudioSample" # Will use blanks if not present
     )
     
-    train_loader = DataLoader(train_dataset, batch_size=src.config.BATCH_SIZE, shuffle=True, collate_fn=collate, num_workers=2)
+    train_loader = DataLoader(train_dataset, batch_size=config.training.batch_size, shuffle=True, collate_fn=collate, num_workers=2)
 
     model = MultimodalFusionNet(
-        text_model_name=src.config.TEXT_MODEL_NAME,
-        vit_model_name=src.config.VISION_BACKBONE_NAME,
+        text_model_name=config.model.text_model_name,
+        vit_model_name=config.model.vision_backbone_name,
         use_audio=True
     ).to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=src.config.LEARNING_RATE)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
     criterion = nn.CrossEntropyLoss()
 
     best_loss = float('inf')
 
-    for epoch in range(src.config.MAX_EPOCHS):
+    for epoch in range(config.training.max_epochs):
         model.train()
         total_loss = 0
         correct = 0
         total = 0
         
-        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{src.config.MAX_EPOCHS}")
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{config.training.max_epochs}")
         for batch in pbar:
             optimizer.zero_grad()
             
@@ -116,20 +116,5 @@ def train():
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--task", type=str, default="classification", help="Task type")
-    parser.add_argument("--data_dir", type=str, default=None, help="Base data directory")
-    parser.add_argument("--dataset_name", type=str, default=None, help="Dataset name")
-    parser.add_argument("--model_name", type=str, default=None, help="Override text model name")
-    parser.add_argument("--batch_size", type=int, default=None, help="Batch size")
-    args = parser.parse_args()
-    
-    if args.data_dir:
-        src.config.DATA_DIR = args.data_dir
-    if args.model_name:
-        src.config.TEXT_MODEL_NAME = args.model_name
-    if args.batch_size:
-        src.config.BATCH_SIZE = args.batch_size
-        
+    config.parse_cli_args()
     train()

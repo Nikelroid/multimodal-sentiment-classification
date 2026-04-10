@@ -24,3 +24,5 @@ kaggle
 jinja2
 python-dotenv
 librosa
+
+pyyaml>=6.0

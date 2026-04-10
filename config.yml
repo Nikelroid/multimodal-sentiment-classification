@@ -1,0 +1,23 @@
+# -----------------------------------------------
+# Core Multimodal MLOps Configuration
+# -----------------------------------------------
+# Modifying parameters here will universally sync 
+# across Dataloaders, Transformers, and Telemetry
+# -----------------------------------------------
+
+training:
+  batch_size: 32
+  learning_rate: 0.00005
+  max_epochs: 10
+  project_name: "multimodal-sentiment-classification"
+
+model:
+  text_model_name: "roberta-base"
+  vision_backbone_name: "google/vit-base-patch16-224-in21k"
+  audio_model_name: "facebook/wav2vec2-base"
+  visualbert_name: "uclanlp/visualbert-nlvr2"
+  max_text_len: 50
+
+data:
+  dataset_name: "MSCTD"
+  # data_dir is structurally managed via CLI or Environment

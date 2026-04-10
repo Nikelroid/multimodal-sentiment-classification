@@ -48,23 +48,7 @@ def log_metrics_wandb(acc, p, r, f1, cm):
 
 
 if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--task", type=str, default="classification", help="Task type")
-    parser.add_argument("--data_dir", type=str, default=None, help="Base data directory")
-    parser.add_argument("--dataset_name", type=str, default=None, help="Dataset name")
-    parser.add_argument("--model_name", type=str, default=None, help="Override text model name")
-    parser.add_argument("--batch_size", type=int, default=None, help="Batch size")
-    args = parser.parse_args()
-    
-    import src.config
-    if args.data_dir:
-        src.config.DATA_DIR = args.data_dir
-    if args.model_name:
-        src.config.TEXT_MODEL_NAME = args.model_name
-    if args.batch_size:
-        src.config.BATCH_SIZE = args.batch_size
-
+    config.parse_cli_args()
     import os
     from torch.utils.data import DataLoader
     from transformers import AutoTokenizer, AutoImageProcessor
@@ -72,13 +56,13 @@ if __name__ == "__main__":
     from src.data.preprocess import sent_preprocess
     from src.models.multimodal import MultimodalFusionNet
     from src.pipelines.train import collate_fn
-    import src.config
+    from src.configs import config
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Starting Evaluation on {device}...")
     
     test_dataset = MultimodalDataset(
-        dataset_dir=src.config.MSCTD_DIR,
+        dataset_dir=config.data.msctd_dir,
         images_dir="dataset/test/test_ende",
         texts_file="dataset/test/english_test.txt",
         sentiments_file="dataset/test/sentiment_test.txt",
@@ -86,15 +70,15 @@ if __name__ == "__main__":
         audio_dir="AudioSample"
     )
     
-    tokenizer = AutoTokenizer.from_pretrained(src.config.TEXT_MODEL_NAME)
-    feature_extractor = AutoImageProcessor.from_pretrained(src.config.VISION_BACKBONE_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(config.model.text_model_name)
+    feature_extractor = AutoImageProcessor.from_pretrained(config.model.vision_backbone_name)
     collate = lambda b: collate_fn(b, tokenizer, feature_extractor)
     
-    test_loader = DataLoader(test_dataset, batch_size=src.config.BATCH_SIZE, shuffle=False, collate_fn=collate, num_workers=2)
+    test_loader = DataLoader(test_dataset, batch_size=config.training.batch_size, shuffle=False, collate_fn=collate, num_workers=2)
     
     model = MultimodalFusionNet(
-        text_model_name=src.config.TEXT_MODEL_NAME,
-        vit_model_name=src.config.VISION_BACKBONE_NAME,
+        text_model_name=config.model.text_model_name,
+        vit_model_name=config.model.vision_backbone_name,
         use_audio=True
     ).to(device)
     

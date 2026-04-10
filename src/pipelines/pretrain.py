@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, AutoFeatureExtractor
-from src.config import DATA_DIR, MSCTD_DIR, BATCH_SIZE, MAX_EPOCHS, LEARNING_RATE, TEXT_MODEL_NAME
+from src.configs import config
 
 # Pretrain isolated modalities (e.g., text only)
 # This serves as a minimal example of how to pretrain the NLP stream 

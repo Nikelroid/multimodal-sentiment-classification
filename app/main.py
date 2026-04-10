@@ -15,7 +15,7 @@ import librosa
 from PIL import Image
 from transformers import AutoTokenizer, AutoImageProcessor
 from src.models.multimodal import MultimodalFusionNet
-from src.config import TEXT_MODEL_NAME, VISION_BACKBONE_NAME
+from src.configs import config
 
 app = FastAPI(title="Multimodal Sentiment Analysis")
 
@@ -34,8 +34,8 @@ try:
     model = MultimodalFusionNet(use_audio=True).to(device)
     # model.load_state_dict(torch.load("models/best_multimodal.pt", map_location=device))
     model.eval()
-    tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
-    feature_extractor = AutoImageProcessor.from_pretrained(VISION_BACKBONE_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(config.model.text_model_name)
+    feature_extractor = AutoImageProcessor.from_pretrained(config.model.vision_backbone_name)
     print("Models loaded successfully!")
 except Exception as e:
     print(f"Warning: Model weights not found or failed to load. Will run dummy predictions. Error: {e}")
