@@ -1,0 +1,33 @@
+name: multimodal_env
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - pytorch
+  - torchvision
+  - torchaudio
+  - scikit-learn
+  - pandas
+  - numpy
+  - matplotlib
+  - seaborn
+  - pillow
+  - pip
+  - pip:
+    - transformers
+    - datasets
+    - wandb
+    - fastapi
+    - uvicorn
+    - python-multipart
+    - opencv-python
+    - mtcnn
+    - pyenchant
+    - nltk
+    - emoji
+    - gdown
+    - kaggle
+    - librosa
+    - soundfile

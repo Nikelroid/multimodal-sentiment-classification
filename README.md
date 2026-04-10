@@ -1,91 +1,57 @@
-# Multi-Modal Sentiment Classification
+# Multimodal Sentiment Classification
 
-## Sharif University of Technology, EE Dept. <br/> Deep Learning Graduate Course, Dr. E. Fatemizadeh
+A highly robust, production-ready MLOps repository for predicting the sentiment (Negative, Neutral, Positive) of multimodal inputs using Modern Deep Learning stacks and APIs.
 
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
-![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)
-![Transformers](https://img.shields.io/badge/Transformers-4.0+-yellow.svg)
-![Scikit-Learn](https://img.shields.io/badge/scikit--learn-1.0+-orange.svg)
+## 🚀 Key Features
 
+* **Multi-Modal Fusion**: Dynamically processes & fuses Text (`RoBERTa`), Images (`ViT`), and Audio (`wav2vec2`).
+* **Clean Architecture**: Refactored from dispersed Jupyter Notebooks into a strictly typed, modular pipeline (`src/models/`, `src/data/`, `src/pipelines/`).
+* **Automated Data Ingestion**: One-command aggregation from sources like MSCTD and Kaggle InstaNY100K.
+* **SLURM Ready**: Contains pre-configured batch scripts to queue on clusters effortlessly.
+* **Experiment Tracking**: Integrated `Weights & Biases (wandb)` to log every batch, metric, and checkpoint automatically.
+* **Beautiful FastAPI Server**: Production interface wrapped in a stunning glassmorphism UI.
 
+## 📁 Repository Structure
 
+* `app/`: FastAPI application server and UI templates.
+* `data/`: Internal datastore handling downloaded and processed dataset files.
+* `notebooks/`: Contains `test_development.ipynb` - a single unified playground for Jupyter experimentation.
+* `slurm/`: Job submission files.
+* `src/`: Core logic (Configuration, Dataloaders, Deep Learning Models, Preprocessors).
 
-## Description
-This project implements a deep learning pipeline for **Multi-Modal Sentiment Analysis**, specifically designed to process and classify sentiment in image-text conversations. Built using **PyTorch**, the system leverages state-of-the-art models to analyze both visual and textual data. It utilizes **EfficientNet** for image feature extraction and **BERT** for textual embeddings, fusing these modalities to predict sentiments (Positive, Negative, Neutral).
+## 🛠 Setup & Installation
 
-The project is structured into distinct phases, evolving from basic data handling to complex multimodal fusion strategies, making it a comprehensive resource for understanding how to integrate Natural Language Processing (NLP) and Computer Vision (CV).
+1. Create a `.env` file from the example:
+```bash
+cp .env.example .env
+# Edit .env with your keys (Kaggle API, Github, WandB)
+```
 
-![concept image](multimodal.png)
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-## Features
-* **Robust Data Handling:** Custom PyTorch DataLoaders designed for the MSCTD (Multi-Modal Sentiment Classification and Time Dynamics) dataset.
-* **Visual Sentiment Analysis:**
-    * Face detection and extraction using **MTCNN** and **RetinaFace**.
-    * Feature extraction using pre-trained **EfficientNet-B2**.
-* **Textual Sentiment Analysis:**
-    * Preprocessing pipelines involving tokenization, lemmatization, and stop-word removal.
-    * Implementation of classical methods (**TF-IDF**, **SVM**) and deep learning approaches (**Word2Vec**, **BERT**).
-* **Multimodal Fusion:** Strategies to concatenate and fuse embedded vectors from both image and text models for superior classification performance.
-* **Model Evaluation:** Comprehensive metrics including Accuracy, Precision, Recall, and F1-Score with confusion matrix visualizations.
+## 🧠 Training & Pipelines
 
-## Installation
+To execute the full lifecycle on a SLURM queue:
+```bash
+# Load your system envs properly in setup_env.sh
+bash slurm/setup_env.sh
+```
 
-1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/nikelroid/multi-modal-sentiment-classification.git](https://github.com/nikelroid/multi-modal-sentiment-classification.git)
-    cd multi-modal-sentiment-classification
-    ```
+Or run steps manually:
+```bash
+python src/data/ingestion.py   # Download datasets
+python src/pipelines/train.py  # Train Multimodal Network
+```
 
-2.  **Install dependencies:**
-    It is recommended to use a virtual environment.
-    ```bash
-    pip install torch torchvision torchaudio
-    pip install transformers scikit-learn pandas numpy matplotlib seaborn
-    pip install mtcnn pyenchant nltk
-    ```
+## 🌐 Running the UI Web Server
+Start the frontend interface and inference engine locally:
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
+Navigate to `http://localhost:8000/`. You can submit text, upload images and standard wav files to generate predictions instantly.
 
-3.  **Download NLTK data (if required):**
-    ```python
-    import nltk
-    nltk.download('punkt')
-    nltk.download('stopwords')
-    nltk.download('wordnet')
-    ```
-
-## Usage
-
-The project is divided into four phases. You can run the Jupyter Notebooks for each phase sequentially:
-
-### Phase 0: Data Preparation
-* **Goal:** Initialize data loaders and prepare the MSCTD dataset.
-* **Run:** `Phase-0/project_phase0.ipynb`
-
-### Phase 1: Visual Analysis
-* **Goal:** Extract facial features and analyze images for sentiment.
-* **Run:** `Phase-1/Phase1-Part1.ipynb`, `Phase-1/Phase1-Part2.ipynb`, etc.
-
-### Phase 2: Textual Analysis
-* **Goal:** Train NLP models to classify sentiment based on text dialogue.
-* **Run:** `Phase-2/Phase2.ipynb`
-
-### Phase 3: Multimodal Fusion
-* **Goal:** Combine pre-trained visual and textual models to train a final classifier.
-* **Run:** `Phase-3/Phase3_Part1.ipynb`
-
-## Contributing
-Contributions are welcome! Please follow these steps:
-1.  Fork the repository.
-2.  Create a new feature branch (`git checkout -b feature/AmazingFeature`).
-3.  Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4.  Push to the branch (`git push origin feature/AmazingFeature`).
-5.  Open a Pull Request.
-
-## License
-This project is distributed under the MIT License. See `LICENSE` for more information.
-
-## Contact/Support
-For questions or support, please open an issue in this repository or contact the original participants:
-* Nima Kelidari
-* Ali Abbasi
-* Amir Ahmad Shafiee
-
+## Audio Processing Note 🎵
+Audio feature extraction is completely optional. Provide a `.wav` file to the UI, and it routes dynamically through `wav2vec2`. If audio is omitted, the framework gracefully applies zeros to the fusion space without crashing.

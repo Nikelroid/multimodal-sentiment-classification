@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multimodal Sentiment Classifier</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="background-container">
+        <div class="blob shape1"></div>
+        <div class="blob shape2"></div>
+        <div class="blob shape3"></div>
+    </div>
+
+    <div class="glass-container">
+        <h1>Multimodal Sentiment Engine</h1>
+        <p class="subtitle">Analyze emotion by fusing Text, Image, and Audio inputs.</p>
+
+        <form id="predictForm">
+            <div class="input-group">
+                <label for="text">Enter Text:</label>
+                <textarea id="text" name="text" rows="3" placeholder="I am feeling fantastic today!" required></textarea>
+            </div>
+            
+            <div class="input-group">
+                <label for="image">Upload Image (Optional):</label>
+                <input type="file" id="image" name="image" accept="image/*">
+            </div>
+
+            <div class="input-group">
+                <label for="audio">Upload Audio (Optional .wav):</label>
+                <input type="file" id="audio" name="audio" accept="audio/wav">
+            </div>
+
+            <button type="submit" class="glow-on-hover">Analyze Sentiment</button>
+        </form>
+
+        <div id="resultBox" class="result-box hidden">
+            <h2>Prediction: <span id="predLabel"></span></h2>
+            <p>Confidence: <span id="confValue"></span>%</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById("predictForm").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const btn = document.querySelector(".glow-on-hover");
+            btn.innerText = "Analyzing...";
+
+            const formData = new FormData();
+            formData.append("text", document.getElementById("text").value);
+            
+            const imageFile = document.getElementById("image").files[0];
+            if (imageFile) formData.append("image", imageFile);
+
+            const audioFile = document.getElementById("audio").files[0];
+            if (audioFile) formData.append("audio", audioFile);
+
+            try {
+                const response = await fetch("/predict", {
+                    method: "POST",
+                    body: formData
+                });
+                const data = await response.json();
+                
+                document.getElementById("resultBox").classList.remove("hidden");
+                const predEl = document.getElementById("predLabel");
+                predEl.innerText = data.sentiment;
+                
+                // Color dynamically
+                if(data.sentiment === "Positive") predEl.style.color = "#4ade80";
+                else if(data.sentiment === "Negative") predEl.style.color = "#f87171";
+                else predEl.style.color = "#fbbf24";
+
+                document.getElementById("confValue").innerText = (data.confidence * 100).toFixed(2);
+            } catch (err) {
+                alert("Error making prediction: " + err);
+            } finally {
+                btn.innerText = "Analyze Sentiment";
+            }
+        });
+    </script>
+</body>
+</html>
