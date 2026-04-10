@@ -56,13 +56,13 @@ class MultimodalDataset(Dataset):
             text = self.preprocess_text_func(text)
         
         # 3. Audio Modality (Optional, dummy if directory not present/matching)
-        audio_tensor = torch.zeros((1, 16000)) # Dummy 1-sec silence
+        audio_tensor = torch.zeros(16000) # Dummy 1-sec silence
         if self.audio_dir and os.path.exists(self.audio_dir / f"{idx}.wav"):
             try:
                 import librosa
                 audio_path = self.audio_dir / f"{idx}.wav"
                 waveform, sr = librosa.load(audio_path, sr=16000)
-                audio_tensor = torch.tensor(waveform).unsqueeze(0)
+                audio_tensor = torch.tensor(waveform)
                 if self.audio_transform:
                     audio_tensor = self.audio_transform(audio_tensor)
             except Exception:
