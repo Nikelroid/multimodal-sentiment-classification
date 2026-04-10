@@ -44,4 +44,52 @@ def log_metrics_wandb(acc, p, r, f1, cm):
     print(f"Eval results - Acc: {acc}, F1: {f1}")
 
 if __name__ == "__main__":
-    pass # To be called within unified test notebook or scripts
+    import os
+    from torch.utils.data import DataLoader
+    from transformers import AutoTokenizer, AutoImageProcessor
+    from src.data.dataloaders import MultimodalDataset
+    from src.data.preprocess import sent_preprocess
+    from src.models.multimodal import MultimodalFusionNet
+    from src.pipelines.train import collate_fn
+    import src.config
+    
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Starting Evaluation on {device}...")
+    
+    test_dataset = MultimodalDataset(
+        dataset_dir=src.config.MSCTD_DIR,
+        images_dir="dataset/test/test_ende",
+        texts_file="dataset/test/english_test.txt",
+        sentiments_file="dataset/test/sentiment_test.txt",
+        preprocess_text_func=sent_preprocess,
+        audio_dir="AudioSample"
+    )
+    
+    tokenizer = AutoTokenizer.from_pretrained(src.config.TEXT_MODEL_NAME)
+    feature_extractor = AutoImageProcessor.from_pretrained(src.config.VISION_BACKBONE_NAME)
+    collate = lambda b: collate_fn(b, tokenizer, feature_extractor)
+    
+    test_loader = DataLoader(test_dataset, batch_size=src.config.BATCH_SIZE, shuffle=False, collate_fn=collate, num_workers=2)
+    
+    model = MultimodalFusionNet(
+        text_model_name=src.config.TEXT_MODEL_NAME,
+        vit_model_name=src.config.VISION_BACKBONE_NAME,
+        use_audio=True
+    ).to(device)
+    
+    model_path = "models/best_multimodal.pt"
+    if os.path.exists(model_path):
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        print(f"Loaded finalized checkpoint from {model_path}")
+    else:
+        print("Warning: No model checkpoint found. Expected 'models/best_multimodal.pt'")
+        
+    acc, p, r, f1, cm = evaluate_model(model, test_loader, device)
+    
+    print("-" * 30)
+    print(f"Evaluation Accuracy : {acc:.4f}")
+    print(f"Evaluation F1 Score : {f1:.4f}")
+    print(f"Evaluation Precision: {p:.4f}")
+    print(f"Evaluation Recall   : {r:.4f}")
+    print("Confusion Matrix:\n", cm)
+    print("-" * 30)
