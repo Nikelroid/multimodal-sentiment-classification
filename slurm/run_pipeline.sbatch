@@ -32,22 +32,22 @@ TASK="classification"
 
 # Step 1: Data Ingestion
 echo "Running data ingestion..."
-python src/data/ingestion.py --data_dir ${DATA_PATH}
+conda run -n multimodal_env python -u src/data/ingestion.py --data_dir ${DATA_PATH}
 
 # Step 2: Preprocessing
 echo "Running data preprocessing..."
-python src/data/preprocess.py
+conda run -n multimodal_env python -u src/data/preprocess.py
 
 # Step 3: Pretraining Modalities (Face, Scene, Text, Audio)
 echo "Running modality pretraining..."
-python src/pipelines/pretrain.py
+conda run -n multimodal_env python -u src/pipelines/pretrain.py
 
 # Step 4: Final Multimodal Training
 echo "Running main training loop..."
-python src/pipelines/train.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --vision_model ${VISION_MODEL} --batch_size ${BATCH_SIZE}
+conda run -n multimodal_env python -u src/pipelines/train.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --vision_model ${VISION_MODEL} --batch_size ${BATCH_SIZE}
 
 # Step 5: Post-training analysis
 echo "Running post-training analysis..."
-python src/pipelines/evaluate.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --vision_model ${VISION_MODEL} --batch_size ${BATCH_SIZE}
+conda run -n multimodal_env python -u src/pipelines/evaluate.py --task ${TASK} --data_dir ${DATA_PATH} --dataset_name ${DATASET_NAME} --model_name ${MODEL} --vision_model ${VISION_MODEL} --batch_size ${BATCH_SIZE}
 
 echo "Pipeline completed successfully."

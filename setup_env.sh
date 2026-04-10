@@ -64,13 +64,7 @@ else
     conda env create -f environment.yml
 fi
 
-# 4.5 Dataset Aggregation & External Ingestion
-echo "=========================================="
-echo " 4.5. Dataset Aggregation"
-echo "=========================================="
 
-echo "Running automated data ingestion for MSCTD and InstaNY100K..."
-conda run -n $ENV_NAME python src/data/ingestion.py
 
 echo "=========================================="
 echo " 5. Pre-Caching Models"
