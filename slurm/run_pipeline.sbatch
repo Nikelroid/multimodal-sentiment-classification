@@ -10,13 +10,18 @@
 
 echo "Starting pipeline..."
 
-# Load conda if applicable or navigate to virtual env
-# source /home/$USER/miniconda3/etc/profile.d/conda.sh
-# conda activate ml_env
+# Load conda environment properly across different initializations
+if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+    source "$HOME/miniconda3/etc/profile.d/conda.sh"
+elif [ -f "$HOME/miniconda/etc/profile.d/conda.sh" ]; then
+    source "$HOME/miniconda/etc/profile.d/conda.sh"
+else
+    echo "Warning: Conda initialization not found. Ensure miniconda is installed."
+fi
 
-# Install requirements if not present
-echo "Installing dependencies..."
-pip install -r requirements.txt
+conda activate multimodal_env
+echo "Active environment:"
+conda info --envs | grep '*'
 
 # Step 1: Data Ingestion
 echo "Running data ingestion..."
