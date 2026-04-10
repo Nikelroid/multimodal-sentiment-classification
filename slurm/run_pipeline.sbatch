@@ -5,7 +5,7 @@
 #SBATCH --time=48:00:00
 #SBATCH --partition=gpu
 #SBATCH --account=robinjia_1822
-#SBATCH --gres=gpu:l40s:1
+#SBATCH --gres=gpu:v100:1
 #SBATCH --mem=64G
 #SBATCH --cpus-per-task=8
 
