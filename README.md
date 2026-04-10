@@ -7,7 +7,7 @@
 ![Transformers](https://img.shields.io/badge/Transformers-4.0+-yellow.svg)
 ![Scikit-Learn](https://img.shields.io/badge/scikit--learn-1.0+-orange.svg)
 
-![concept image](multimodal.jpg)
+![concept image](multimodal.jpeg)
 
 
 ## Description
