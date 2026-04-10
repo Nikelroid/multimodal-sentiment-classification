@@ -11,9 +11,11 @@ A highly robust, production-ready MLOps repository for predicting the sentiment 
 * **Experiment Tracking**: Integrated `Weights & Biases (wandb)` to log every batch, metric, and checkpoint automatically.
 * **Beautiful FastAPI Server**: Production interface wrapped in a stunning glassmorphism UI.
 
+![avatar](example_py.png)
+
 ## 📁 Repository Structure
 
-* `api_server/`: FastAPI application server and UI templates.
+* `app/`: FastAPI application server and UI templates.
 * `data/`: Internal datastore handling downloaded and processed dataset files.
 * `notebooks/`: Contains `test_development.ipynb` - a single unified playground for Jupyter experimentation.
 * `slurm/`: Job submission files.
@@ -49,7 +51,7 @@ python src/pipelines/train.py  # Train Multimodal Network
 ## 🌐 Running the UI Web Server
 Start the frontend interface and inference engine locally:
 ```bash
-uvicorn api_server.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 Navigate to `http://localhost:8000/`. You can submit text, upload images and standard wav files to generate predictions instantly.
 
