@@ -13,7 +13,7 @@ import torch
 import io
 import librosa
 from PIL import Image
-from transformers import AutoTokenizer, AutoFeatureExtractor
+from transformers import AutoTokenizer, AutoImageProcessor
 from src.models.multimodal import MultimodalFusionNet
 from src.config import TEXT_MODEL_NAME, VISION_BACKBONE_NAME
 
@@ -35,7 +35,7 @@ try:
     # model.load_state_dict(torch.load("models/best_multimodal.pt", map_location=device))
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
-    feature_extractor = AutoFeatureExtractor.from_pretrained(VISION_BACKBONE_NAME)
+    feature_extractor = AutoImageProcessor.from_pretrained(VISION_BACKBONE_NAME)
     print("Models loaded successfully!")
 except Exception as e:
     print(f"Warning: Model weights not found or failed to load. Will run dummy predictions. Error: {e}")

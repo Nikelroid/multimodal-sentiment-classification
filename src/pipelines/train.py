@@ -2,7 +2,7 @@ import os
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, AutoFeatureExtractor
+from transformers import AutoTokenizer, AutoImageProcessor
 from src.config import DATA_DIR, MSCTD_DIR, BATCH_SIZE, MAX_EPOCHS, LEARNING_RATE, TEXT_MODEL_NAME, VISION_BACKBONE_NAME
 from src.data.dataloaders import MultimodalDataset
 from src.data.preprocess import sent_preprocess
@@ -40,7 +40,7 @@ def train():
     print(f"Using device: {device}")
 
     tokenizer = AutoTokenizer.from_pretrained(TEXT_MODEL_NAME)
-    feature_extractor = AutoFeatureExtractor.from_pretrained(VISION_BACKBONE_NAME)
+    feature_extractor = AutoImageProcessor.from_pretrained(VISION_BACKBONE_NAME)
 
     # Wrap collation
     collate = lambda b: collate_fn(b, tokenizer, feature_extractor)
