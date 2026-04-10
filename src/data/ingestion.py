@@ -38,7 +38,7 @@ def download_msctd():
         run_cmd(f"mv *{split}* {split_dir}/ 2>/dev/null || true")
         # Properly structure text maps from the MSCTD GitHub repository core directory
         for kind in ['english', 'sentiment']:
-            src_path = os.path.join("MSCTD_data", "Main_Data", f"{kind}_{split}.txt")
+            src_path = os.path.join("MSCTD_data", "ende", f"{kind}_{split}.txt")
             if os.path.exists(src_path):
                 import shutil
                 shutil.copy(src_path, split_dir)

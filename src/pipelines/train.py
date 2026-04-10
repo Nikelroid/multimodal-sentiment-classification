@@ -31,9 +31,13 @@ def collate_fn(batch, tokenizer, feature_extractor):
     }
 
 def train():
+    import datetime
+    run_name = f"fusion_{config.model.text_model_name.split('/')[-1]}_{config.model.vision_backbone_name.split('/')[-1]}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}"
+    
     wandb.init(
+        name=run_name,
         entity="kelidari-usc",
-        project="multimodal-sentiment-analysis", config={
+        project=config.training.project_name, config={
         "learning_rate": config.training.learning_rate,
         "epochs": config.training.max_epochs,
         "batch_size": config.training.batch_size,
