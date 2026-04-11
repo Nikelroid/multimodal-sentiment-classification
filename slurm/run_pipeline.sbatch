@@ -2,12 +2,12 @@
 #SBATCH --job-name=multimodal_sentiment
 #SBATCH --output=slurm/multimodal_sentiment_%j.out
 #SBATCH --error=slurm/multimodal_sentiment_%j.err
-#SBATCH --time=48:00:00
+#SBATCH --time=6:00:00
 #SBATCH --partition=gpu
 #SBATCH --account=robinjia_1822
 #SBATCH --gres=gpu:v100:1
-#SBATCH --mem=64G
-#SBATCH --cpus-per-task=8
+#SBATCH --mem=16GB
+#SBATCH --cpus-per-task=4
 
 echo "Starting pipeline..."
 
