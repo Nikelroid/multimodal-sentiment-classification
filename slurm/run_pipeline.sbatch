@@ -27,6 +27,9 @@ conda activate multimodal_env
 echo "Active environment:"
 conda info --envs | grep '*'
 
+echo "Patching missing environment wheel bindings..."
+conda run -n multimodal_env pip install --no-cache-dir --upgrade --force-reinstall numpy pyyaml regex click
+
 DATA_PATH="/scratch1/kelidari/multimodal_data"
 DATASET_NAME="MSCTD"
 MODEL="roberta-base"
