@@ -27,9 +27,6 @@ conda activate multimodal_env
 echo "Active environment:"
 conda info --envs | grep '*'
 
-echo "Flawlessly synchronizing entire PyPI ecosystem (Bypassing stalled Conda Resolver)..."
-conda run -n multimodal_env pip install --no-cache-dir --upgrade transformers datasets wandb httpx platformdirs click regex tqdm pyyaml librosa numpy==1.26.4
-
 DATA_PATH="/scratch1/kelidari/multimodal_data"
 DATASET_NAME="MSCTD"
 MODEL="roberta-base"

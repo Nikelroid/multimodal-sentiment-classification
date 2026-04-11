@@ -54,15 +54,15 @@ cd $REPO_NAME
 
 # 4. Environment Syncing
 ENV_NAME="multimodal_env"
-# echo "Analyzing target environment footprint: $ENV_NAME"
+echo "Analyzing target environment footprint: $ENV_NAME"
 
-# if conda env list | grep -q "$ENV_NAME"; then
-#     echo "$ENV_NAME payload detected! Synchronizing missing packages..."
-#     conda env update -f environment.yml --prune
-# else
-#     echo "$ENV_NAME payload not found. Constructing fresh conda environment..."
-#     conda env create -f environment.yml
-# fi
+if conda env list | grep -q "$ENV_NAME"; then
+    echo "$ENV_NAME payload detected! Synchronizing missing packages..."
+    conda env update -f environment.yml --prune
+else
+    echo "$ENV_NAME payload not found. Constructing fresh conda environment..."
+    conda env create -f environment.yml
+fi
 
 
 
