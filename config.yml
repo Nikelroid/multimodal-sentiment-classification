@@ -7,15 +7,20 @@
 
 training:
   batch_size: 32
-  learning_rate: 0.00005
-  max_epochs: 10
+  learning_rate: 0.00001   # backbone LR (large pretrained encoders want small steps)
+  head_lr: 0.001           # fusion head is trained from scratch
+  weight_decay: 0.01
+  warmup_ratio: 0.06
+  label_smoothing: 0.1
+  max_epochs: 8
+  patience: 3
   num_workers: 2
   val_split: 0.1
   project_name: "multimodal-sentiment-classification"
 
 model:
-  text_model_name: "roberta-base"
-  vision_backbone_name: "google/vit-base-patch16-224-in21k"
+  text_model_name: "microsoft/deberta-v3-large"
+  vision_backbone_name: "facebook/dinov2-large"
   audio_model_name: "facebook/wav2vec2-base"
   visualbert_name: "uclanlp/visualbert-nlvr2"
   max_text_len: 50

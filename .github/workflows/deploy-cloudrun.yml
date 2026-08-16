@@ -1,0 +1,69 @@
+# One-click CD: deploys the inference API to Google Cloud Run.
+#
+# One-time setup:
+#   1. Upload the trained checkpoint as a GitHub release asset:
+#        gh release create model-latest models/best_multimodal.pt \
+#           --title "Trained checkpoint" --notes "best_multimodal.pt for deployment"
+#      (re-run `gh release upload model-latest models/best_multimodal.pt --clobber`
+#       whenever you retrain)
+#   2. Repo Settings -> Secrets and variables -> Actions:
+#        GCP_SA_KEY        JSON key of a service account with Cloud Run Admin,
+#                          Cloud Build Editor, and Service Account User roles
+#        GCP_PROJECT_ID    your GCP project id
+#
+# Then: Actions tab -> "Deploy to Cloud Run" -> Run workflow.
+
+name: Deploy to Cloud Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub release tag holding best_multimodal.pt"
+        required: true
+        default: "model-latest"
+      region:
+        description: "Cloud Run region"
+        required: true
+        default: "us-central1"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch model checkpoint from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p models
+          gh release download "${{ inputs.release_tag }}" \
+            --pattern best_multimodal.pt --dir models
+          ls -lh models/
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy
+        run: |
+          gcloud run deploy multimodal-sentiment \
+            --source . \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --region "${{ inputs.region }}" \
+            --allow-unauthenticated \
+            --memory 8Gi --cpu 4 \
+            --min-instances 0 --max-instances 2
+
+      - name: Smoke test
+        run: |
+          URL=$(gcloud run services describe multimodal-sentiment \
+            --project "${{ secrets.GCP_PROJECT_ID }}" \
+            --region "${{ inputs.region }}" --format 'value(status.url)')
+          echo "Service URL: $URL"
+          curl -sf -X POST -F "text=I love this project!" "$URL/predict"

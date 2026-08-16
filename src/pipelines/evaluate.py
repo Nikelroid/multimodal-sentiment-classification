@@ -69,9 +69,10 @@ if __name__ == "__main__":
 
     tokenizer = AutoTokenizer.from_pretrained(config.model.text_model_name)
     feature_extractor = AutoImageProcessor.from_pretrained(config.model.vision_backbone_name)
-    collate = lambda b: multimodal_collate(b, tokenizer, feature_extractor,
-                                           max_text_len=config.model.max_text_len,
-                                           use_audio=use_audio)
+    def collate(batch):
+        return multimodal_collate(batch, tokenizer, feature_extractor,
+                                  max_text_len=config.model.max_text_len,
+                                  use_audio=use_audio)
 
     test_loader = DataLoader(test_dataset, batch_size=config.training.batch_size,
                              shuffle=False, collate_fn=collate,

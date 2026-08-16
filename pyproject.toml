@@ -1,0 +1,11 @@
+[tool.ruff]
+line-length = 120
+extend-exclude = ["notebooks", "docs"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+# E402: pipeline entrypoints bootstrap sys.path before imports by design
+ignore = ["E402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

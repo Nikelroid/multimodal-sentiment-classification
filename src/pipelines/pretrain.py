@@ -2,11 +2,6 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, AutoFeatureExtractor
-from src.configs import config
 
 # Pretrain isolated modalities (e.g., text only)
 # This serves as a minimal example of how to pretrain the NLP stream 

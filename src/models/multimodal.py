@@ -17,9 +17,9 @@ class MultimodalFusionNet(nn.Module):
         self.image_extractor = ViTFeatureExtractor(vit_model_name)
 
         # Embedding sizes come from the loaded backbones, so swapping e.g.
-        # roberta-base -> roberta-large keeps the fusion head consistent.
+        # roberta-base -> deberta-v3-large keeps the fusion head consistent.
         self.text_dim = self.text_extractor.encoder.config.hidden_size
-        self.image_dim = self.image_extractor.vit.config.hidden_size
+        self.image_dim = self.image_extractor.encoder.config.hidden_size
 
         fused_dim = self.text_dim + self.image_dim
 
@@ -30,14 +30,15 @@ class MultimodalFusionNet(nn.Module):
         else:
             self.audio_dim = 0
 
+        # LayerNorm rather than BatchNorm: batch-size independent (works for
+        # single-sample inference) and consistent with the transformer backbones.
         self.classifier = nn.Sequential(
+            nn.LayerNorm(fused_dim),
             nn.Linear(fused_dim, 512),
-            nn.BatchNorm1d(512),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.3),
             nn.Linear(512, 128),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.3),
             nn.Linear(128, num_classes)
         )

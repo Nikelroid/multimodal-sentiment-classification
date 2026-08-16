@@ -51,15 +51,17 @@ def sent_preprocess(sent, lower=True, remove_punct=True, remove_stopwords=False,
     word_tokens = word_tokenize(sent)
 
     if remove_stopwords and stop_words:
-        word_tokens = [w for w in word_tokens if not w in stop_words]
+        word_tokens = [w for w in word_tokens if w not in stop_words]
 
     if lemmatize:
         word_tokens = [lemmatizer.lemmatize(w) for w in word_tokens]
 
     if handle_nums:
         def is_number(s):
-            if s.isdigit(): return True
-            if len(s) > 2 and s[:-2].isdigit() and s[-2:] in ['th', 'st', 'nd', 'rd']: return True
+            if s.isdigit():
+                return True
+            if len(s) > 2 and s[:-2].isdigit() and s[-2:] in ['th', 'st', 'nd', 'rd']:
+                return True
             return False
         word_tokens = [NUM if is_number(w) else w for w in word_tokens]
 

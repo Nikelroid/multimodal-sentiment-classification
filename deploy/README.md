@@ -22,7 +22,7 @@ gcloud run deploy multimodal-sentiment \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --memory 2Gi --cpu 2 \
+  --memory 8Gi --cpu 4 \
   --min-instances 0 --max-instances 2
 ```
 

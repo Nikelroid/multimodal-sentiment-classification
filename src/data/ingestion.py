@@ -71,7 +71,7 @@ def download_audio_sample():
         try:
             run_cmd("kaggle datasets download -d uwrfkaggler/ravdess-emotional-speech-video")
             run_cmd("unzip -qq ravdess-emotional-speech-video.zip")
-        except Exception as e:
+        except Exception:
             print("Audio dataset download skipped or failed.")
         os.chdir(config.data.data_dir)
 

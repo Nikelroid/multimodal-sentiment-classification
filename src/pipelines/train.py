@@ -5,7 +5,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
-from transformers import AutoTokenizer, AutoImageProcessor
+from transformers import AutoTokenizer, AutoImageProcessor, get_cosine_schedule_with_warmup
+from sklearn.metrics import f1_score
 from src.configs import config
 from src.data.dataloaders import MultimodalDataset
 from src.data.collate import multimodal_collate
@@ -14,11 +15,35 @@ from tqdm import tqdm
 import wandb
 
 
-def run_epoch(model, loader, criterion, device, optimizer=None, scaler=None, desc=""):
+def build_optimizer(model, cfg):
+    """Discriminative LRs: small for pretrained backbones, larger for the fusion
+    head; weight decay skips biases and normalization parameters."""
+    decay, no_decay, head_decay, head_no_decay = [], [], [], []
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+        is_head = name.startswith("classifier")
+        is_no_decay = p.ndim <= 1 or name.endswith(".bias")
+        if is_head:
+            (head_no_decay if is_no_decay else head_decay).append(p)
+        else:
+            (no_decay if is_no_decay else decay).append(p)
+    groups = [
+        {"params": decay, "lr": cfg.learning_rate, "weight_decay": cfg.weight_decay},
+        {"params": no_decay, "lr": cfg.learning_rate, "weight_decay": 0.0},
+        {"params": head_decay, "lr": cfg.head_lr, "weight_decay": cfg.weight_decay},
+        {"params": head_no_decay, "lr": cfg.head_lr, "weight_decay": 0.0},
+    ]
+    return torch.optim.AdamW(groups)
+
+
+def run_epoch(model, loader, criterion, device, optimizer=None, scheduler=None,
+              scaler=None, amp_dtype=None, desc=""):
     """One pass over a loader. Trains when an optimizer is given, else evaluates."""
     training = optimizer is not None
     model.train(training)
     total_loss, correct, total = 0.0, 0, 0
+    all_preds, all_labels = [], []
 
     pbar = tqdm(loader, desc=desc)
     with torch.set_grad_enabled(training):
@@ -29,7 +54,8 @@ def run_epoch(model, loader, criterion, device, optimizer=None, scaler=None, des
             audio_values = batch["audio_values"].to(device) if batch["audio_values"] is not None else None
             labels = batch["labels"].to(device)
 
-            with torch.autocast(device_type=device.type, enabled=scaler is not None):
+            with torch.autocast(device_type=device.type, dtype=amp_dtype,
+                                enabled=amp_dtype is not None):
                 logits = model(input_ids, attention_mask, pixel_values, audio_values)
                 loss = criterion(logits, labels)
 
@@ -37,19 +63,28 @@ def run_epoch(model, loader, criterion, device, optimizer=None, scaler=None, des
                 optimizer.zero_grad(set_to_none=True)
                 if scaler is not None:
                     scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
                     loss.backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                     optimizer.step()
-                wandb.log({"batch_loss": loss.item()})
+                if scheduler is not None:
+                    scheduler.step()
+                wandb.log({"batch_loss": loss.item(), "lr": optimizer.param_groups[0]["lr"]})
 
+            preds = logits.argmax(dim=1)
             total_loss += loss.item()
-            correct += (logits.argmax(dim=1) == labels).sum().item()
+            correct += (preds == labels).sum().item()
             total += labels.size(0)
+            all_preds.extend(preds.cpu().tolist())
+            all_labels.extend(labels.cpu().tolist())
             pbar.set_postfix({'loss': loss.item(), 'acc': correct / max(total, 1)})
 
-    return total_loss / max(len(loader), 1), correct / max(total, 1)
+    macro_f1 = f1_score(all_labels, all_preds, average="macro", zero_division=0)
+    return total_loss / max(len(loader), 1), correct / max(total, 1), macro_f1
 
 
 def train():
@@ -61,8 +96,10 @@ def train():
         entity=config.training.entity_name,
         project=config.training.project_name, config={
         "learning_rate": config.training.learning_rate,
+        "head_lr": config.training.head_lr,
         "epochs": config.training.max_epochs,
         "batch_size": config.training.batch_size,
+        "label_smoothing": config.training.label_smoothing,
         "text_model": config.model.text_model_name,
         "vision_model": config.model.vision_backbone_name,
         "use_audio": config.model.use_audio,
@@ -75,9 +112,11 @@ def train():
     feature_extractor = AutoImageProcessor.from_pretrained(config.model.vision_backbone_name)
 
     use_audio = config.model.use_audio
-    collate = lambda b: multimodal_collate(b, tokenizer, feature_extractor,
-                                           max_text_len=config.model.max_text_len,
-                                           use_audio=use_audio)
+
+    def collate(batch):
+        return multimodal_collate(batch, tokenizer, feature_extractor,
+                                  max_text_len=config.model.max_text_len,
+                                  use_audio=use_audio)
 
     # Raw text goes straight to the tokenizer: transformer backbones perform
     # best without lowercasing/punctuation stripping.
@@ -97,7 +136,6 @@ def train():
     loader_args = dict(batch_size=config.training.batch_size, collate_fn=collate,
                        num_workers=config.training.num_workers,
                        pin_memory=device.type == "cuda")
-    # drop_last avoids a size-1 final batch, which BatchNorm cannot normalize in train mode
     train_loader = DataLoader(train_set, shuffle=True, drop_last=True, **loader_args)
     val_loader = DataLoader(val_set, shuffle=False, **loader_args)
 
@@ -108,26 +146,51 @@ def train():
         use_audio=use_audio,
     ).to(device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config.training.learning_rate)
-    criterion = nn.CrossEntropyLoss()
-    scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
+    optimizer = build_optimizer(model, config.training)
+    total_steps = len(train_loader) * config.training.max_epochs
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer,
+        num_warmup_steps=int(config.training.warmup_ratio * total_steps),
+        num_training_steps=total_steps,
+    )
+    criterion = nn.CrossEntropyLoss(label_smoothing=config.training.label_smoothing)
 
-    best_val_loss = float('inf')
+    # bf16 on Ampere+ needs no loss scaling; fall back to fp16 + GradScaler.
+    if device.type == "cuda" and torch.cuda.is_bf16_supported():
+        amp_dtype, scaler = torch.bfloat16, None
+    elif device.type == "cuda":
+        amp_dtype, scaler = torch.float16, torch.amp.GradScaler("cuda")
+    else:
+        amp_dtype, scaler = None, None
+
+    best_val_f1, epochs_without_improvement = -1.0, 0
 
     for epoch in range(config.training.max_epochs):
-        train_loss, train_acc = run_epoch(model, train_loader, criterion, device,
-                                          optimizer=optimizer, scaler=scaler,
-                                          desc=f"Epoch {epoch+1}/{config.training.max_epochs}")
-        val_loss, val_acc = run_epoch(model, val_loader, criterion, device, desc="Validation")
+        train_loss, train_acc, train_f1 = run_epoch(
+            model, train_loader, criterion, device, optimizer=optimizer,
+            scheduler=scheduler, scaler=scaler, amp_dtype=amp_dtype,
+            desc=f"Epoch {epoch+1}/{config.training.max_epochs}")
+        val_loss, val_acc, val_f1 = run_epoch(
+            model, val_loader, criterion, device, amp_dtype=amp_dtype, desc="Validation")
 
         wandb.log({"epoch": epoch, "loss": train_loss, "accuracy": train_acc,
-                   "val_loss": val_loss, "val_accuracy": val_acc})
+                   "train_f1": train_f1, "val_loss": val_loss,
+                   "val_accuracy": val_acc, "val_f1": val_f1})
+        print(f"Epoch {epoch+1}: val_loss={val_loss:.4f} val_acc={val_acc:.4f} val_f1={val_f1:.4f}")
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        # Select on macro-F1: robust to class imbalance, unlike raw loss/accuracy.
+        if val_f1 > best_val_f1:
+            best_val_f1 = val_f1
+            epochs_without_improvement = 0
             os.makedirs("models", exist_ok=True)
             torch.save(model.state_dict(), "models/best_multimodal.pt")
-            print(f"Saved best model (val_loss={val_loss:.4f}).")
+            print(f"Saved best model (val_f1={val_f1:.4f}).")
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement >= config.training.patience:
+                print(f"Early stopping after {epoch+1} epochs (no val F1 gain "
+                      f"for {config.training.patience}).")
+                break
 
     wandb.finish()
 
