@@ -170,6 +170,11 @@ async def predict_sentiment(
     # component's prior is scaled by its certainty (1 - normalized entropy),
     # so a confident voice read outweighs an unsure text read and vice versa.
     if waveform_np is not None and audio_model is not None:
+        # Peak-normalize: consumer-mic recordings are far quieter than the
+        # loudness-normalized studio clips the model trained on.
+        peak = float(abs(waveform_np).max())
+        if peak > 1e-6:
+            waveform_np = waveform_np * (0.95 / peak)
         feats = audio_fe(waveform_np, sampling_rate=16000,
                          return_tensors="pt")["input_features"].to(device)
         with torch.no_grad():

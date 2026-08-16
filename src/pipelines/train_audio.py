@@ -32,9 +32,10 @@ CREMAD_VAL_MIN_ACTOR = 1080            # CREMA-D actors >= this go to validation
 
 
 class RavdessDataset(Dataset):
-    def __init__(self, files, feature_extractor):
+    def __init__(self, files, feature_extractor, augment=False):
         self.files = files
         self.fe = feature_extractor
+        self.augment = augment
 
     def __len__(self):
         return len(self.files)
@@ -46,6 +47,16 @@ class RavdessDataset(Dataset):
             wav = wav.mean(axis=1)
         if sr != 16000:
             wav = resample_poly(wav, 16000, sr).astype(np.float32)
+        if self.augment:
+            # Consumer-mic robustness: studio corpora are clean and loud, real
+            # recordings are quiet and noisy - without this, room noise reads
+            # as negative prosody.
+            rng = np.random.default_rng()
+            wav = wav * (10 ** rng.uniform(-1.5, 0.0))          # gain -30..0 dB
+            if rng.random() < 0.7:
+                snr_db = rng.uniform(10, 40)
+                noise_rms = np.sqrt((wav ** 2).mean()) / (10 ** (snr_db / 20))
+                wav = wav + rng.normal(0, noise_rms, len(wav)).astype(np.float32)
         feats = self.fe(wav, sampling_rate=16000, return_tensors="np")["input_features"][0]
         return torch.tensor(feats), label
 
@@ -106,7 +117,8 @@ def main():
     print(f"train clips: {len(train_files)} | val clips (speaker-independent): {len(val_files)}")
 
     fe = WhisperFeatureExtractor.from_pretrained(args.model_name)
-    train_ds, val_ds = RavdessDataset(train_files, fe), RavdessDataset(val_files, fe)
+    train_ds = RavdessDataset(train_files, fe, augment=True)
+    val_ds = RavdessDataset(val_files, fe)
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, num_workers=4)
 
@@ -127,7 +139,12 @@ def main():
         ])
     else:
         optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), lr=args.lr)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    # Class weights: the emotion->sentiment mapping is negative-heavy
+    # (4 of 6-8 emotions), so unweighted training over-predicts Negative.
+    counts = np.bincount([lb for _, lb in train_files], minlength=3)
+    weights = torch.tensor(counts.sum() / (3.0 * counts), dtype=torch.float32).to(device)
+    print(f"class counts {counts.tolist()} -> loss weights {[round(w, 2) for w in weights.tolist()]}")
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1, weight=weights)
 
     best_acc = 0.0
     for epoch in range(args.epochs):
