@@ -12,7 +12,9 @@
 set -u
 cd "$SLURM_SUBMIT_DIR"
 
+# gcc supplies the libstdc++ the conda env's compiled wheels (pandas) need.
 module purge
+module load gcc/13.3.0
 export PYTHONNOUSERSITE=1
 export HF_HOME=/scratch1/kelidari/hf_cache
 export TMPDIR=/scratch1/kelidari/tmp
