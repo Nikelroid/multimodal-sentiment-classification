@@ -56,6 +56,9 @@ try:
 except Exception as e:
     print(f"Warning: Model weights not found or failed to load. Will run dummy predictions. Error: {e}")
     model = None
+    load_error = f"{type(e).__name__}: {e}"[:300]
+else:
+    load_error = None
 
 # Optional face-expression branch: detect the largest face at inference and
 # feed the crop to the fusion model (mirrors training-time precomputed crops).
@@ -115,8 +118,10 @@ async def predict_sentiment(
     audio: UploadFile = File(None)
 ):
     if not model:
-        # Dummy fallback response if models not downloaded yet
-        return {"sentiment": "Neutral", "confidence": 0.99, "warning": "Model not loaded properly."}
+        # Dummy fallback response if models not downloaded yet; surfaces the
+        # startup error so remote deployments are diagnosable via the API.
+        return {"sentiment": "Neutral", "confidence": 0.99,
+                "warning": "Model not loaded properly.", "load_error": load_error}
 
     # 1. Process Text
     inputs = tokenizer(text, return_tensors="pt",

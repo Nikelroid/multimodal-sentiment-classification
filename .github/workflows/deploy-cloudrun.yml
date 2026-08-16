@@ -57,7 +57,7 @@ jobs:
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --region "${{ inputs.region }}" \
             --allow-unauthenticated \
-            --memory 8Gi --cpu 4 \
+            --memory 16Gi --cpu 4 \
             --min-instances 0 --max-instances 2
 
       - name: Smoke test
