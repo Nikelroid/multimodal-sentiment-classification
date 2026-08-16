@@ -261,8 +261,8 @@ async def predict_sentiment(
     if face_values is not None and fer_model is not None:
         with torch.no_grad():
             fer_probs = torch.softmax(fer_model(pixel_values=face_values).logits, dim=1)[0]
-        result["face_expression"] = {l: round(float(p) * 100, 1)
-                                     for l, p in zip(fer_labels, fer_probs)}
+        result["face_expression"] = {lab: round(float(p) * 100, 1)
+                                     for lab, p in zip(fer_labels, fer_probs)}
         if not text.strip():
             result["raw_probabilities"] = as_pct(probs)  # fusion read, for reference
             calib = None
@@ -273,13 +273,13 @@ async def predict_sentiment(
                 if fc.get("type") == "fer7":
                     calib = fc
             if calib is not None:
-                order = [fer_labels.index(l) for l in calib["labels"]]
+                order = [fer_labels.index(lab) for lab in calib["labels"]]
                 x = torch.log(fer_probs[order] + 1e-4)
                 W = torch.tensor(calib["W"], dtype=x.dtype, device=x.device)
                 b = torch.tensor(calib["b"], dtype=x.dtype, device=x.device)
                 probs = torch.softmax(W @ x + b, dim=0)
             else:
-                g = {l: float(p) for l, p in zip(fer_labels, fer_probs)}
+                g = {lab: float(p) for lab, p in zip(fer_labels, fer_probs)}
                 mapped = torch.tensor(
                     [g.get("neutral", 0.0),
                      g.get("angry", 0.0) + g.get("disgust", 0.0)
