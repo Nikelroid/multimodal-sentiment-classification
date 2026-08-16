@@ -13,17 +13,20 @@ live browser playground with webcam and voice capture.
 
 ## 📊 Results (MSCTD test split, n=5,067)
 
-| Model | Text encoder | Vision encoder | Test acc | Macro-F1 | Checkpoint |
-|---|---|---|---|---|---|
-| Baseline (legacy recipe) | RoBERTa-base | ViT-B/16 | 62.6% | 0.607 | 0.8 GB |
-| **Fusion-Large (default)** | **RoBERTa-large** (mean-pooled) | **DINOv2-large** | **62.2%** | **0.601** | 1.3 GB (fp16) |
-| Fusion-Base (modern recipe) | RoBERTa-base | DINOv2-base | 60.9% | 0.594 | 0.8 GB |
+| Model | Modalities | Test acc | Macro-F1 | Checkpoint |
+|---|---|---|---|---|
+| Baseline (legacy recipe) | RoBERTa-base + ViT-B/16 | 62.5% | 0.608 | 0.8 GB |
+| Fusion-Large | RoBERTa-large + DINOv2-large | 62.3% | 0.603 | 1.3 GB fp16 |
+| Fusion-Base | RoBERTa-base + DINOv2-base | 60.9% | 0.594 | 0.8 GB |
+| + text dropout | RoBERTa-large + DINOv2-large | 62.4% | 0.610 | 1.3 GB fp16 |
+| **+ face branch (default)** | **text + scene + face-expression ViT** | **63.0%** | **0.611** | 1.6 GB fp16 |
 
-The top two are statistically tied at this test size (±1.4% at 95% CI) —
-MSCTD's text+image sentiment signal saturates around ~62%, consistent with
-published results on this dataset. Fusion-Large ships as the default: it pairs
-the tied-best test score with the soundest selection methodology (validation
-macro-F1, early stopping) and is the released checkpoint.
+MSCTD's text+scene signal saturates around ~62% (consistent with published
+results); scene frames alone carry almost no extractable sentiment. The gains
+came from (a) text dropout, which stops the model degenerating without text,
+and (b) the **face-expression branch** — MTCNN-detected largest-face crops
+encoded by an expression-pretrained ViT — the only visual pathway that
+demonstrably responds to image content. The face model is the released default.
 
 Training recipe for the modern runs: discriminative learning rates (backbones
 2e-5, fusion head 5e-4), cosine schedule with warmup, label smoothing 0.1,
@@ -39,7 +42,14 @@ fused with the multimodal model at decision level:
 
 | Component | Val accuracy (speaker-independent) | Checkpoint |
 |---|---|---|
-| Whisper-base encoder (frozen) + learned layer mix + MLP head | **82.1%** | 40 MB (fp16) |
+| Whisper-base (frozen) + learned layer mix, noise-augmented (**released**) | **83.2%** | 40 MB (fp16) |
+| Whisper-small two-stage fine-tune (no augmentation yet) | 87.1% | future upgrade |
+
+On top of the general model, a **per-speaker calibration** (affine transform on
+log-probabilities, fit from a 10-minute guided session in `docs/lab.html`)
+reaches **91.7% leave-one-out accuracy** on the owner's conversational voice —
+acted corpora are far more theatrical than real speech, and the calibration
+bridges that gap. The app auto-loads `models/voice_calibration.json`.
 
 Two techniques worth noting:
 

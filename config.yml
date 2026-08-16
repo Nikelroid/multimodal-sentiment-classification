@@ -12,6 +12,7 @@ training:
   weight_decay: 0.01
   warmup_ratio: 0.06
   label_smoothing: 0.1
+  text_dropout: 0.2
   max_epochs: 8
   patience: 3
   num_workers: 2
@@ -28,6 +29,7 @@ model:
   visualbert_name: "uclanlp/visualbert-nlvr2"
   max_text_len: 50
   use_audio: false
+  use_face: true   # face-expression branch (precomputed crops at train, MTCNN at inference)
 
 data:
   dataset_name: "MSCTD"
