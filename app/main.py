@@ -236,6 +236,9 @@ async def predict_sentiment(
             w_audio = (1 - prior_mm) * certainty(audio_probs)
             probs = (w_mm * probs + w_audio * audio_probs) / (w_mm + w_audio + 1e-9)
 
+    if has_real_image and mtcnn is not None:
+        result["face_detected"] = face_values is not None
+
     pred_idx = probs.argmax().item()
     result.update({"sentiment": classes[pred_idx],
                    "confidence": round(probs[pred_idx].item(), 4),
