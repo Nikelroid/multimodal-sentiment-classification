@@ -134,6 +134,12 @@
     background: var(--accent); color: #fff; font: 600 15px system-ui;
   }
   button#analyze:disabled { opacity: .6; cursor: wait; }
+  .server-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .server-toggle .seg {
+    padding: 8px 16px; border: none; cursor: pointer; font: 600 13.5px system-ui;
+    background: var(--surface); color: var(--muted);
+  }
+  .server-toggle .seg.active { background: var(--accent); color: #fff; }
 
   #result { margin-top: 24px; display: none; }
   .verdict { display: flex; align-items: baseline; gap: 12px; }
@@ -253,8 +259,12 @@
 
       <div class="row">
         <div class="grow">
-          <label for="api">API endpoint <span class="hint">— cloud by default, or point it at your own local server</span></label>
-          <input type="text" id="api">
+          <label>Inference server</label>
+          <div class="server-toggle">
+            <button type="button" class="seg" id="modeCloud">☁️ Cloud demo</button>
+            <button type="button" class="seg" id="modeLocal">💻 My own server</button>
+          </div>
+          <input type="text" id="api" style="margin-top:8px">
         </div>
         <button id="analyze">Analyze sentiment</button>
       </div>
@@ -269,14 +279,19 @@
       </div>
 
       <div id="offline">
-        <div class="offline-box">
-          <strong>Couldn't reach the API.</strong> Start the inference server on your machine,
+        <div class="offline-box" id="offlineCloud" style="display:none">
+          <strong>The demo server is waking up.</strong> It scales to zero when idle,
+          so the first request after a quiet period takes ~30–60 seconds while the
+          model loads. Try again in a moment.
+        </div>
+        <div class="offline-box" id="offlineLocal" style="display:none">
+          <strong>Couldn't reach your server.</strong> Start it on your machine,
           then try again:
           <pre>git clone https://github.com/Nikelroid/multimodal-sentiment-classification
 cd multimodal-sentiment-classification
 pip install -r requirements.txt
 uvicorn app.main:app --port 8000</pre>
-          The playground talks only to the endpoint above — your inputs never leave your machine.
+          In this mode the playground talks only to your endpoint — inputs never leave your machine.
         </div>
       </div>
     </div>
@@ -290,14 +305,35 @@ uvicorn app.main:app --port 8000</pre>
 </div>
 
 <script>
-  // Default inference endpoint. Set this to your Cloud Run URL once deployed;
-  // visitors can always override it in the field or with ?api=<url>.
-  const DEFAULT_API = "http://localhost:8000";
+  // Hosted demo endpoint (scale-to-zero Cloud Run); visitors can switch to
+  // their own server with the toggle, or override with ?api=<url>.
+  const CLOUD_API = "https://multimodal-sentiment-nu3eefe4ra-uw.a.run.app";
+  const LOCAL_DEFAULT = "http://localhost:8000";
 
   const $ = (id) => document.getElementById(id);
   const COLORS = { Negative: "var(--neg)", Neutral: "var(--neu)", Positive: "var(--pos)" };
 
-  $("api").value = new URLSearchParams(location.search).get("api") || DEFAULT_API;
+  function setMode(mode) {
+    localStorage.setItem("server_mode", mode);
+    $("modeCloud").classList.toggle("active", mode === "cloud");
+    $("modeLocal").classList.toggle("active", mode !== "cloud");
+    if (mode === "cloud") {
+      $("api").value = CLOUD_API;
+      $("api").readOnly = true;
+    } else {
+      $("api").value = localStorage.getItem("custom_api") || LOCAL_DEFAULT;
+      $("api").readOnly = false;
+    }
+  }
+  $("modeCloud").addEventListener("click", () => setMode("cloud"));
+  $("modeLocal").addEventListener("click", () => setMode("local"));
+  $("api").addEventListener("change", () => {
+    if (!$("api").readOnly) localStorage.setItem("custom_api", $("api").value.trim());
+  });
+
+  const urlApi = new URLSearchParams(location.search).get("api");
+  if (urlApi) { localStorage.setItem("custom_api", urlApi); setMode("local"); }
+  else setMode(localStorage.getItem("server_mode") || "cloud");
 
   document.querySelectorAll(".chip").forEach((chip) => {
     chip.addEventListener("click", () => { $("text").value = chip.textContent; });
@@ -483,6 +519,9 @@ uvicorn app.main:app --port 8000</pre>
       $("result").style.display = "block";
       requestAnimationFrame(() => { bar.style.width = Math.max(4, conf * 100) + "%"; });
     } catch (err) {
+      const cloud = localStorage.getItem("server_mode") !== "local";
+      $("offlineCloud").style.display = cloud ? "block" : "none";
+      $("offlineLocal").style.display = cloud ? "none" : "block";
       $("offline").style.display = "block";
     } finally {
       btn.disabled = false; btn.textContent = "Analyze sentiment";
