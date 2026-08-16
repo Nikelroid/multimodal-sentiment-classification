@@ -15,7 +15,7 @@ class MultimodalDataset(Dataset):
     """
     def __init__(self, dataset_dir, images_dir, texts_file, sentiments_file,
                  preprocess_text_func=None, image_transform=None, audio_dir=None,
-                 audio_transform=None, audio_samples=AUDIO_SAMPLES):
+                 audio_transform=None, audio_samples=AUDIO_SAMPLES, face_dir=None):
 
         self.dataset_path = Path(dataset_dir)
         self.images_path = self.dataset_path / images_dir
@@ -34,6 +34,14 @@ class MultimodalDataset(Dataset):
             self.audio_dir = None
         self.audio_transform = audio_transform
         self.audio_samples = audio_samples
+
+        # Optional precomputed face crops (src/data/extract_faces.py); a
+        # missing crop file means no face was detected in that frame.
+        if face_dir:
+            face_dir = Path(face_dir)
+            self.face_dir = face_dir if face_dir.is_absolute() else self.dataset_path / face_dir
+        else:
+            self.face_dir = None
 
         with open(self.text_path, 'r') as f:
             self.texts = f.read().splitlines()
@@ -86,9 +94,18 @@ class MultimodalDataset(Dataset):
         if self.preprocess_text_func is not None:
             text = self.preprocess_text_func(text)
 
+        # 4. Face Modality (optional): blank crop when no face was detected
+        face = None
+        if self.face_dir is not None:
+            try:
+                face = Image.open(self.face_dir / f"{idx}.jpg").convert('RGB')
+            except Exception:
+                face = Image.new('RGB', (224, 224))
+
         return {
             "image": image,
             "text": text,
             "audio": self._load_audio(idx),
+            "face": face,
             "label": int(self.sentiments[idx]),
         }

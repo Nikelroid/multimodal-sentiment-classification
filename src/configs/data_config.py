@@ -9,6 +9,7 @@ class DataConfig:
     data_dir: Path = None
     msctd_dir: Path = None
     instany_dir: Path = None
+    face_dir: Path = None   # precomputed face crops root (train/ and test/ subdirs)
     dataset_name: str = "MSCTD"
 
     def __post_init__(self):

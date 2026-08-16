@@ -52,11 +52,13 @@ def run_epoch(model, loader, criterion, device, optimizer=None, scheduler=None,
             attention_mask = batch["attention_mask"].to(device)
             pixel_values = batch["pixel_values"].to(device)
             audio_values = batch["audio_values"].to(device) if batch["audio_values"] is not None else None
+            face_values = batch.get("face_values")
+            face_values = face_values.to(device) if face_values is not None else None
             labels = batch["labels"].to(device)
 
             with torch.autocast(device_type=device.type, dtype=amp_dtype,
                                 enabled=amp_dtype is not None):
-                logits = model(input_ids, attention_mask, pixel_values, audio_values)
+                logits = model(input_ids, attention_mask, pixel_values, audio_values, face_values)
                 loss = criterion(logits, labels)
 
             if training:
@@ -112,11 +114,25 @@ def train():
     feature_extractor = AutoImageProcessor.from_pretrained(config.model.vision_backbone_name)
 
     use_audio = config.model.use_audio
+    use_face = config.model.use_face and config.data.face_dir is not None
+    face_processor = (AutoImageProcessor.from_pretrained(config.model.face_model_name)
+                      if use_face else None)
 
     def collate(batch):
         return multimodal_collate(batch, tokenizer, feature_extractor,
                                   max_text_len=config.model.max_text_len,
-                                  use_audio=use_audio)
+                                  use_audio=use_audio, face_processor=face_processor)
+
+    def train_collate(batch):
+        # Modality dropout: blank the text on a fraction of samples so the
+        # model learns to predict from the image alone (image-only inference
+        # otherwise collapses to a constant).
+        p = config.training.text_dropout
+        if p > 0:
+            for item in batch:
+                if torch.rand(1).item() < p:
+                    item['text'] = ''
+        return collate(batch)
 
     # Raw text goes straight to the tokenizer: transformer backbones perform
     # best without lowercasing/punctuation stripping.
@@ -126,6 +142,7 @@ def train():
         texts_file="dataset/train/english_train.txt",
         sentiments_file="dataset/train/sentiment_train.txt",
         audio_dir=config.data.data_dir / "AudioSample" if use_audio else None,
+        face_dir=config.data.face_dir / "train" if use_face else None,
     )
 
     # Held-out validation split for model selection.
@@ -144,6 +161,8 @@ def train():
         vit_model_name=config.model.vision_backbone_name,
         audio_model_name=config.model.audio_model_name,
         use_audio=use_audio,
+        use_face=use_face,
+        face_model_name=config.model.face_model_name,
     ).to(device)
 
     optimizer = build_optimizer(model, config.training)

@@ -1,7 +1,8 @@
 import torch
 
 
-def multimodal_collate(batch, tokenizer, feature_extractor, max_text_len=None, use_audio=False):
+def multimodal_collate(batch, tokenizer, feature_extractor, max_text_len=None,
+                       use_audio=False, face_processor=None):
     """Batch dict samples from MultimodalDataset into model-ready tensors."""
     texts = [item['text'] for item in batch]
     images = [item['image'] for item in batch]
@@ -15,10 +16,16 @@ def multimodal_collate(batch, tokenizer, feature_extractor, max_text_len=None, u
     # would otherwise be run through wav2vec2 for nothing.
     audio_values = torch.stack([item['audio'] for item in batch]) if use_audio else None
 
+    face_values = None
+    if face_processor is not None and batch[0].get('face') is not None:
+        faces = [item['face'] for item in batch]
+        face_values = face_processor(images=faces, return_tensors="pt")["pixel_values"]
+
     return {
         "input_ids": text_encodings["input_ids"],
         "attention_mask": text_encodings["attention_mask"],
         "pixel_values": image_encodings["pixel_values"],
         "audio_values": audio_values,
+        "face_values": face_values,
         "labels": torch.tensor(labels, dtype=torch.long),
     }

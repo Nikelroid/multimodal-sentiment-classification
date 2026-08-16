@@ -9,6 +9,7 @@ class TrainingConfig:
     weight_decay: float = 0.01
     warmup_ratio: float = 0.06
     label_smoothing: float = 0.1
+    text_dropout: float = 0.2   # train-time modality dropout: blank the text so the vision branch learns to stand alone
     max_epochs: int = 10
     patience: int = 3             # early-stopping patience on validation macro-F1
     num_workers: int = 2

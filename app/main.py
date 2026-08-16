@@ -57,6 +57,38 @@ except Exception as e:
     print(f"Warning: Model weights not found or failed to load. Will run dummy predictions. Error: {e}")
     model = None
 
+# Optional face-expression branch: detect the largest face at inference and
+# feed the crop to the fusion model (mirrors training-time precomputed crops).
+face_processor, mtcnn = None, None
+if model is not None and config.model.use_face:
+    try:
+        from facenet_pytorch import MTCNN
+        face_processor = AutoImageProcessor.from_pretrained(config.model.face_model_name)
+        mtcnn = MTCNN(select_largest=True, post_process=False, device=str(device))
+        print("Face branch enabled.")
+    except Exception as e:
+        print(f"Face branch disabled ({e}).")
+        mtcnn = None
+
+
+def detect_face_crop(pil_image):
+    """Largest-face crop with 20% context padding, or None."""
+    if mtcnn is None:
+        return None
+    try:
+        boxes, probs = mtcnn.detect(pil_image)
+        if boxes is None or probs[0] is None or probs[0] < 0.90:
+            return None
+        x1, y1, x2, y2 = boxes[0]
+        w, h = x2 - x1, y2 - y1
+        x1, y1 = max(0, x1 - 0.2 * w), max(0, y1 - 0.2 * h)
+        x2 = min(pil_image.width, x2 + 0.2 * w)
+        y2 = min(pil_image.height, y2 + 0.2 * h)
+        return pil_image.crop((x1, y1, x2, y2)).resize((224, 224))
+    except Exception:
+        return None
+
+
 # Optional speech-tone model (late fusion). Missing checkpoint just disables it.
 AUDIO_MODEL_PATH = os.getenv("AUDIO_MODEL_PATH", "models/audio_sentiment.pt")
 audio_model, audio_fe = None, None
@@ -92,11 +124,15 @@ async def predict_sentiment(
     input_ids = inputs["input_ids"].to(device)
     attention_mask = inputs["attention_mask"].to(device)
 
-    # 2. Process Image
+    # 2. Process Image (+ optional face crop for the expression branch)
+    face_values = None
     if image and image.filename:
         img_bytes = await image.read()
         pil_image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         pixel_values = feature_extractor(images=pil_image, return_tensors="pt")["pixel_values"].to(device)
+        face_crop = detect_face_crop(pil_image)
+        if face_crop is not None and face_processor is not None:
+            face_values = face_processor(images=face_crop, return_tensors="pt")["pixel_values"].to(device)
     else:
         # Blank image through the processor — matches the training-time
         # missing-image fallback distribution (raw zeros would not).
@@ -123,9 +159,9 @@ async def predict_sentiment(
     # MSCTD label encoding (per the dataset README): neutral: 0, negative: 1, positive: 2
     classes = ["Neutral", "Negative", "Positive"]
 
-    # Prediction (text + image)
+    # Prediction (text + image + optional face)
     with torch.no_grad():
-        logits = model(input_ids, attention_mask, pixel_values, audio_values)
+        logits = model(input_ids, attention_mask, pixel_values, audio_values, face_values)
         probs = torch.softmax(logits, dim=1)[0]
 
     result = {}

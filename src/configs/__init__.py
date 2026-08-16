@@ -54,6 +54,7 @@ class GlobalConfig:
         # General / Data
         parser.add_argument("--task", type=str, default="classification", help="Task type")
         parser.add_argument("--data_dir", type=str, default=None, help="Base data directory override")
+        parser.add_argument("--face_dir", type=str, default=None, help="Precomputed face crops root (train/ and test/ subdirs)")
         parser.add_argument("--dataset_name", type=str, default=None, help="Dataset name")
         
         # Model
@@ -70,6 +71,9 @@ class GlobalConfig:
         # Propagate explicitly provided overrides securely
         if parsed_args.data_dir is not None:
             self.data.update_data_dir(parsed_args.data_dir)
+
+        if parsed_args.face_dir is not None:
+            self.data.face_dir = Path(parsed_args.face_dir)
             
         if parsed_args.model_name is not None:
             self.model.text_model_name = parsed_args.model_name

@@ -17,9 +17,11 @@ def evaluate_model(model, dataloader, device):
             attention_mask = batch["attention_mask"].to(device)
             pixel_values = batch["pixel_values"].to(device)
             audio_values = batch["audio_values"].to(device) if batch["audio_values"] is not None else None
+            face_values = batch.get("face_values")
+            face_values = face_values.to(device) if face_values is not None else None
             labels = batch["labels"].to(device)
 
-            logits = model(input_ids, attention_mask, pixel_values, audio_values)
+            logits = model(input_ids, attention_mask, pixel_values, audio_values, face_values)
             preds = logits.argmax(dim=1)
 
             all_preds.extend(preds.cpu().numpy())
@@ -59,20 +61,24 @@ if __name__ == "__main__":
     print(f"Starting Evaluation on {device}...")
 
     use_audio = config.model.use_audio
+    use_face = config.model.use_face and config.data.face_dir is not None
     test_dataset = MultimodalDataset(
         dataset_dir=config.data.msctd_dir,
-        images_dir="dataset/test/test_ende",
+        images_dir="dataset/test/test",
         texts_file="dataset/test/english_test.txt",
         sentiments_file="dataset/test/sentiment_test.txt",
         audio_dir=config.data.data_dir / "AudioSample" if use_audio else None,
+        face_dir=config.data.face_dir / "test" if use_face else None,
     )
 
     tokenizer = AutoTokenizer.from_pretrained(config.model.text_model_name)
     feature_extractor = AutoImageProcessor.from_pretrained(config.model.vision_backbone_name)
+    face_processor = (AutoImageProcessor.from_pretrained(config.model.face_model_name)
+                      if use_face else None)
     def collate(batch):
         return multimodal_collate(batch, tokenizer, feature_extractor,
                                   max_text_len=config.model.max_text_len,
-                                  use_audio=use_audio)
+                                  use_audio=use_audio, face_processor=face_processor)
 
     test_loader = DataLoader(test_dataset, batch_size=config.training.batch_size,
                              shuffle=False, collate_fn=collate,
@@ -84,9 +90,11 @@ if __name__ == "__main__":
         vit_model_name=config.model.vision_backbone_name,
         audio_model_name=config.model.audio_model_name,
         use_audio=use_audio,
+        use_face=use_face,
+        face_model_name=config.model.face_model_name,
     ).to(device)
 
-    model_path = "models/best_multimodal.pt"
+    model_path = os.getenv("MODEL_PATH", "models/best_multimodal.pt")
     if not os.path.exists(model_path):
         # Evaluating random weights produces misleading numbers, so refuse.
         sys.exit(f"Error: no checkpoint at '{model_path}'. Train one first: python src/pipelines/train.py")

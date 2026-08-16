@@ -6,6 +6,8 @@ WORKDIR /srv
 
 COPY deploy/requirements-serve.txt .
 RUN pip install --no-cache-dir -r requirements-serve.txt
+# --no-deps: facenet-pytorch pins torch<2.3 and would otherwise downgrade it
+RUN pip install --no-cache-dir --no-deps facenet-pytorch
 
 COPY config.yml .
 COPY src/ src/

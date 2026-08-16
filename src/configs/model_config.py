@@ -8,3 +8,5 @@ class ModelConfig:
     visualbert_name: str = "uclanlp/visualbert-nlvr2"
     max_text_len: int = 50
     use_audio: bool = False  # MSCTD ships no audio; enable only when an audio dir is populated
+    use_face: bool = False   # face-expression branch; needs precomputed crops (src/data/extract_faces.py)
+    face_model_name: str = "trpakov/vit-face-expression"
