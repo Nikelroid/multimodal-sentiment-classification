@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Calibration Lab</title>
+<style>
+  :root {
+    --bg:#fafaf8; --surface:#fff; --ink:#17211f; --muted:#5c6a66;
+    --line:#e3e5e0; --accent:#0d7a6c; --accent-soft:#e3f2ef;
+    --neg:#c94f42; --neu:#b98a2e; --pos:#2e8b57;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#101413;--surface:#181d1c;--ink:#e8ecea;--muted:#93a19c;--line:#262d2b;--accent:#35b39f;--accent-soft:#16302b;}
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:26px;margin-bottom:6px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:24px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:18px}
+  label{font-weight:600;font-size:13px;display:block;margin-bottom:6px}
+  input[type=text],input[type=number]{padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+  button{padding:10px 22px;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;font:600 15px system-ui}
+  button.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+  button:disabled{opacity:.5;cursor:default}
+  .task-mood{font:700 30px system-ui;margin:6px 0}
+  .task-mood.sad,.task-mood.angry{color:var(--neg)} .task-mood.neutral{color:var(--neu)} .task-mood.happy{color:var(--pos)}
+  .task-sentence{font-size:20px;font-style:italic;margin:10px 0 18px}
+  .progress{height:8px;border-radius:999px;background:var(--line);margin:16px 0;overflow:hidden}
+  .progress>div{height:100%;background:var(--accent);transition:width .3s}
+  .recbtn.recording{background:var(--neg);animation:pulse 1.2s infinite}
+  @keyframes pulse{50%{opacity:.6}}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:10px}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  textarea{width:100%;font:12px/1.5 var(--mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px}
+  .hint{color:var(--muted);font-size:13px}
+  .row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🎙 Voice Calibration Lab</h1>
+  <p class="sub">Read each sentence aloud in the requested mood. The sentences are
+  deliberately neutral — only your <em>tone</em> carries the emotion. Results
+  collect automatically; export the blob at the end.</p>
+
+  <div class="card" id="setup">
+    <div class="row">
+      <div><label>API endpoint</label><input type="text" id="api" size="28"></div>
+      <div><label>Takes per mood+sentence</label><input type="number" id="reps" value="4" min="2" max="8" style="width:70px"></div>
+      <button id="start">Start session</button>
+    </div>
+    <p class="hint" style="margin-top:10px">4 moods × 3 sentences × takes. With 4 takes: 48 recordings, ~10 minutes.</p>
+  </div>
+
+  <div class="card" id="taskCard" style="display:none">
+    <div class="hint" id="taskCount"></div>
+    <div class="progress"><div id="bar" style="width:0"></div></div>
+    <div>Read this in a <span class="task-mood" id="mood"></span> voice:</div>
+    <div class="task-sentence" id="sentence"></div>
+    <div class="row">
+      <button class="recbtn" id="rec">🎙 Record take</button>
+      <button class="ghost" id="skip">Skip take</button>
+      <span class="hint" id="status"></span>
+    </div>
+  </div>
+
+  <div class="card" id="results" style="display:none">
+    <h1 style="font-size:20px">Results</h1>
+    <div id="avgTable"></div>
+    <label style="margin-top:16px">Paste this whole block back to Claude:</label>
+    <textarea id="export" rows="14" readonly></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="copy">Copy to clipboard</button>
+      <button class="ghost" id="restart">New session</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SENTENCES = [
+  "The meeting is scheduled for tomorrow afternoon.",
+  "I just got back from the store a few minutes ago.",
+  "The weather report says it might change later today.",
+];
+const MOODS = ["sad", "angry", "neutral", "happy"];
+const $ = (id) => document.getElementById(id);
+$("api").value = new URLSearchParams(location.search).get("api") || "http://localhost:8000";
+
+let tasks = [], cursor = 0, rows = JSON.parse(localStorage.getItem("lab_rows") || "[]");
+
+function buildTasks(reps) {
+  tasks = [];
+  for (const mood of MOODS)
+    for (let s = 0; s < SENTENCES.length; s++)
+      for (let r = 1; r <= reps; r++)
+        tasks.push({ mood, sentence: s + 1, rep: r });
+}
+
+function showTask() {
+  if (cursor >= tasks.length) return finish();
+  const t = tasks[cursor];
+  $("taskCard").style.display = "block";
+  $("taskCount").textContent = `Recording ${cursor + 1} of ${tasks.length}`;
+  $("bar").style.width = (100 * cursor / tasks.length) + "%";
+  $("mood").textContent = t.mood.toUpperCase();
+  $("mood").className = "task-mood " + t.mood;
+  $("sentence").textContent = "“" + SENTENCES[t.sentence - 1] + "”";
+  $("status").textContent = "";
+}
+
+$("start").addEventListener("click", () => {
+  buildTasks(parseInt($("reps").value) || 4);
+  rows = []; localStorage.removeItem("lab_rows");
+  cursor = 0; $("setup").style.display = "none"; $("results").style.display = "none";
+  showTask();
+});
+
+$("skip").addEventListener("click", () => { cursor++; showTask(); });
+$("restart").addEventListener("click", () => location.reload());
+
+// ---- recorder: PCM -> 16 kHz mono WAV (same pipeline as the playground) ----
+let recState = null;
+function encodeWav(samples, sr) {
+  const buf = new ArrayBuffer(44 + samples.length * 2), dv = new DataView(buf);
+  const ws = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  ws(0,"RIFF"); dv.setUint32(4,36+samples.length*2,true); ws(8,"WAVE"); ws(12,"fmt ");
+  dv.setUint32(16,16,true); dv.setUint16(20,1,true); dv.setUint16(22,1,true);
+  dv.setUint32(24,sr,true); dv.setUint32(28,sr*2,true); dv.setUint16(32,2,true); dv.setUint16(34,16,true);
+  ws(36,"data"); dv.setUint32(40,samples.length*2,true);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([buf], { type: "audio/wav" });
+}
+
+$("rec").addEventListener("click", async () => {
+  if (recState) { await stopRec(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = ctx.createMediaStreamSource(stream);
+    const node = ctx.createScriptProcessor(4096, 1, 1);
+    const chunks = [];
+    node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(node); node.connect(ctx.destination);
+    recState = { stream, ctx, node, chunks };
+    $("rec").classList.add("recording"); $("rec").textContent = "⏹ Stop";
+    $("status").textContent = "recording…";
+  } catch (err) { $("status").textContent = "mic error: " + err.message; }
+});
+
+async function stopRec() {
+  const r = recState; recState = null;
+  $("rec").classList.remove("recording"); $("rec").textContent = "🎙 Record take";
+  r.node.disconnect(); r.stream.getTracks().forEach((t) => t.stop());
+  const inRate = r.ctx.sampleRate; await r.ctx.close();
+  const total = r.chunks.reduce((n, c) => n + c.length, 0);
+  if (total < inRate * 0.5) { $("status").textContent = "too short — try again"; return; }
+  const pcm = new Float32Array(total); let o = 0;
+  for (const c of r.chunks) { pcm.set(c, o); o += c.length; }
+  const targetLen = Math.round(total * 16000 / inRate);
+  const oac = new OfflineAudioContext(1, targetLen, 16000);
+  const b = oac.createBuffer(1, total, inRate); b.copyToChannel(pcm, 0);
+  const s = oac.createBufferSource(); s.buffer = b; s.connect(oac.destination); s.start();
+  const rendered = await oac.startRendering();
+  await submit(encodeWav(rendered.getChannelData(0), 16000));
+}
+
+async function submit(wavBlob) {
+  $("status").textContent = "scoring…";
+  const t = tasks[cursor];
+  const form = new FormData();
+  form.append("text", "");
+  form.append("audio", wavBlob, "take.wav");
+  try {
+    const base = $("api").value.trim().replace(/\/+$/, "");
+    const res = await fetch(base + "/predict", { method: "POST", body: form });
+    const data = await res.json();
+    const v = data.components && data.components.voice_tone;
+    const raw = v && (v.raw_probabilities || v.probabilities);
+    if (!raw) throw new Error("no voice probabilities in response");
+    rows.push({ ...t, neu: raw.Neutral, neg: raw.Negative, pos: raw.Positive });
+    localStorage.setItem("lab_rows", JSON.stringify(rows));
+    $("status").textContent = `raw: Neu ${raw.Neutral} · Neg ${raw.Negative} · Pos ${raw.Positive}`;
+    cursor++; setTimeout(showTask, 900);
+  } catch (err) { $("status").textContent = "failed: " + err.message + " — record again"; }
+}
+
+function finish() {
+  $("taskCard").style.display = "none";
+  $("results").style.display = "block";
+  const cells = {};
+  for (const r of rows) {
+    const k = r.mood + "-s" + r.sentence;
+    (cells[k] = cells[k] || []).push(r);
+  }
+  let html = "<table><tr><th>mood · sentence</th><th>takes</th><th>avg Neu</th><th>avg Neg</th><th>avg Pos</th></tr>";
+  for (const [k, list] of Object.entries(cells)) {
+    const avg = (f) => (list.reduce((a, r) => a + r[f], 0) / list.length).toFixed(1);
+    html += `<tr><td>${k}</td><td>${list.length}</td><td>${avg("neu")}</td><td>${avg("neg")}</td><td>${avg("pos")}</td></tr>`;
+  }
+  $("avgTable").innerHTML = html + "</table>";
+  const lines = ["VOICE CALIBRATION RESULTS v2", "mood,sentence,rep,neu,neg,pos"];
+  for (const r of rows) lines.push(`${r.mood},${r.sentence},${r.rep},${r.neu},${r.neg},${r.pos}`);
+  $("export").value = lines.join("\n");
+}
+
+$("copy").addEventListener("click", () => {
+  $("export").select(); document.execCommand("copy");
+  $("copy").textContent = "Copied ✓"; setTimeout(() => $("copy").textContent = "Copy to clipboard", 1500);
+});
+
+// resume a half-finished session after accidental refresh
+if (rows.length) { finish(); }
+</script>
+</body>
+</html>

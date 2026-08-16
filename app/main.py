@@ -185,19 +185,27 @@ async def predict_sentiment(
         with torch.no_grad():
             audio_probs = torch.softmax(audio_model(feats), dim=1)[0]
 
-        # Conversational-speech calibration (fit on a 3 sentences x 3 moods
-        # user grid): real speech is milder than the acted training corpora, so
-        # Neutral dominates in absolute terms even when Neg/Pos are clearly
-        # elevated above their neutral-speech baselines. If Neutral is not
-        # overwhelming, hand the decision to the emotional classes, with a
-        # boost for Positive (the most undertrained class). Tune via env.
-        cutoff = float(os.getenv("VOICE_NEUTRAL_CUTOFF", "0.85"))
-        damp = float(os.getenv("VOICE_NEUTRAL_DAMP", "0.3"))
-        boost = float(os.getenv("VOICE_POSITIVE_BOOST", "2.2"))
+        # Conversational-speech calibration: real speech is milder than the
+        # acted training corpora, so Neutral dominates in absolute terms even
+        # when Neg/Pos are clearly elevated above their baselines.
+        # Preferred: a learned affine transform on log-probs fitted from
+        # calibration-lab recordings (docs/lab.html -> models/voice_calibration.json).
+        # Fallback: hand rule tuned via env knobs.
         raw_audio_probs = audio_probs.clone()
-        if audio_probs[0] < cutoff:
-            audio_probs = audio_probs * torch.tensor([damp, 1.0, boost], device=audio_probs.device)
-            audio_probs = audio_probs / audio_probs.sum()
+        calib_path = os.getenv("VOICE_CALIBRATION", "models/voice_calibration.json")
+        if os.path.exists(calib_path):
+            import json
+            calib = json.load(open(calib_path))
+            W = torch.tensor(calib["W"], dtype=audio_probs.dtype, device=audio_probs.device)
+            b = torch.tensor(calib["b"], dtype=audio_probs.dtype, device=audio_probs.device)
+            audio_probs = torch.softmax(W @ torch.log(audio_probs + 1e-9) + b, dim=0)
+        else:
+            cutoff = float(os.getenv("VOICE_NEUTRAL_CUTOFF", "0.85"))
+            damp = float(os.getenv("VOICE_NEUTRAL_DAMP", "0.3"))
+            boost = float(os.getenv("VOICE_POSITIVE_BOOST", "2.2"))
+            if audio_probs[0] < cutoff:
+                audio_probs = audio_probs * torch.tensor([damp, 1.0, boost], device=audio_probs.device)
+                audio_probs = audio_probs / audio_probs.sum()
 
         result["components"] = {
             "text_image": {"label": classes[probs.argmax().item()], "probabilities": as_pct(probs)},
