@@ -134,6 +134,8 @@ function grabFrame() {
   return new Promise((res) => c.toBlob(res, "image/jpeg", 0.92));
 }
 
+const FER_KEYS = ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"];
+
 async function captureAndScore(emo, shot) {
   try {
     const blob = await grabFrame();
@@ -143,14 +145,17 @@ async function captureAndScore(emo, shot) {
     const base = $("api").value.trim().replace(/\/+$/, "");
     const res = await fetch(base + "/predict", { method: "POST", body: form });
     const d = await res.json();
-    const p = d.raw_probabilities || d.probabilities || {};
-    rows.push({ emo, shot, face: d.face_detected === true ? 1 : 0,
+    const p = d.probabilities || {};
+    const fer = d.face_expression || {};
+    rows.push({ emo, shot, face: d.face_detected === true ? 1 : 0, fer,
                 neu: p.Neutral ?? -1, neg: p.Negative ?? -1, pos: p.Positive ?? -1 });
     localStorage.setItem("facelab_rows", JSON.stringify(rows));
+    const top = Object.entries(fer).sort((a, b) => b[1] - a[1])[0];
     $("status").textContent = (d.face_detected ? "🙂 " : "😐 no face — ") +
+      (top ? `reads ${top[0]} ${top[1]}% | ` : "") +
       `Neu ${p.Neutral}% Neg ${p.Negative}% Pos ${p.Positive}%`;
   } catch (err) {
-    rows.push({ emo, shot, face: -1, neu: -1, neg: -1, pos: -1 });
+    rows.push({ emo, shot, face: -1, fer: {}, neu: -1, neg: -1, pos: -1 });
     $("status").textContent = "request failed: " + err.message;
   }
 }
@@ -161,15 +166,23 @@ function finish() {
   $("results").style.display = "block";
   const cells = {};
   for (const r of rows) (cells[r.emo] = cells[r.emo] || []).push(r);
-  let html = "<table><tr><th>emotion</th><th>shots</th><th>faces found</th><th>avg Neu</th><th>avg Neg</th><th>avg Pos</th></tr>";
+  let html = "<table><tr><th>emotion</th><th>shots</th><th>faces found</th><th>top expression</th><th>avg Neu</th><th>avg Neg</th><th>avg Pos</th></tr>";
   for (const [emo, list] of Object.entries(cells)) {
     const ok = list.filter((r) => r.face === 1);
     const avg = (f) => ok.length ? (ok.reduce((a, r) => a + r[f], 0) / ok.length).toFixed(1) : "—";
-    html += `<tr><td>${emo}</td><td>${list.length}</td><td>${ok.length}</td><td>${avg("neu")}</td><td>${avg("neg")}</td><td>${avg("pos")}</td></tr>`;
+    const ferAvg = FER_KEYS.map((k) =>
+      [k, ok.length ? ok.reduce((a, r) => a + ((r.fer || {})[k] ?? 0), 0) / ok.length : 0]);
+    const top = ferAvg.sort((a, b) => b[1] - a[1])[0];
+    const topTxt = ok.length && top[1] > 0 ? `${top[0]} ${top[1].toFixed(0)}%` : "—";
+    html += `<tr><td>${emo}</td><td>${list.length}</td><td>${ok.length}</td><td>${topTxt}</td><td>${avg("neu")}</td><td>${avg("neg")}</td><td>${avg("pos")}</td></tr>`;
   }
   $("avgTable").innerHTML = html + "</table>";
-  const lines = ["FACE CALIBRATION RESULTS v1", "emotion,shot,face_detected,neu,neg,pos"];
-  for (const r of rows) lines.push(`${r.emo},${r.shot},${r.face},${r.neu},${r.neg},${r.pos}`);
+  const lines = ["FACE CALIBRATION RESULTS v2",
+                 "emotion,shot,face_detected," + FER_KEYS.join(",") + ",final_neu,final_neg,final_pos"];
+  for (const r of rows) {
+    const fer = FER_KEYS.map((k) => (r.fer || {})[k] ?? -1).join(",");
+    lines.push(`${r.emo},${r.shot},${r.face},${fer},${r.neu},${r.neg},${r.pos}`);
+  }
   $("export").value = lines.join("\n");
 }
 

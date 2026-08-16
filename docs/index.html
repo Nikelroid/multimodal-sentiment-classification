@@ -515,6 +515,11 @@ uvicorn app.main:app --port 8000</pre>
         if (t) lines.push(`text+image → ${t.label} (${pct(t.probabilities)})`);
         if (v) lines.push(`voice tone → ${v.label} (${pct(v.probabilities)})`);
       }
+      if (data.face_expression) {
+        const fx = Object.entries(data.face_expression).sort((a, b) => b[1] - a[1])
+          .slice(0, 3).map(([k, v]) => `${k} ${v}%`).join(" · ");
+        lines.push("🎭 expression: " + fx);
+      }
       if (data.face_detected === true) lines.push("🙂 face detected — expression branch active");
       if (data.face_detected === false) lines.push("😐 no face found in image — expression branch idle (scenes alone carry little signal)");
       if (data.face_note) lines.push("⚠ " + data.face_note);

@@ -75,6 +75,23 @@ if model is not None and config.model.use_face:
         print(f"Face branch disabled ({e}).")
         mtcnn = None
 
+# Direct facial-expression head: the face backbone is a ViT fine-tuned on
+# FER2013, but the fusion head above it was trained on MSCTD dialogue-sentiment
+# labels, which barely supervise facial expression. For image-only requests
+# the FER classifier's own 7-emotion output is the far stronger signal.
+fer_model, fer_labels = None, []
+if mtcnn is not None:
+    try:
+        from transformers import AutoModelForImageClassification
+        fer_model = AutoModelForImageClassification.from_pretrained(
+            config.model.face_model_name).to(device).eval()
+        fer_labels = [fer_model.config.id2label[i].lower()
+                      for i in range(len(fer_model.config.id2label))]
+        print(f"FER head enabled ({', '.join(fer_labels)}).")
+    except Exception as e:
+        print(f"FER head disabled ({e}).")
+        fer_model = None
+
 
 def detect_face_crop(pil_image):
     """Largest-face crop with 20% context padding, or None."""
@@ -236,18 +253,40 @@ async def predict_sentiment(
             w_audio = (1 - prior_mm) * certainty(audio_probs)
             probs = (w_mm * probs + w_audio * audio_probs) / (w_mm + w_audio + 1e-9)
 
-    # Face-driven calibration (image-only requests with a detected face):
-    # analogous to the voice calibration, fitted from docs/face-lab.html
-    # sessions -> models/face_calibration.json.
-    if not text.strip() and face_values is not None:
-        fc_path = os.getenv("FACE_CALIBRATION", "models/face_calibration.json")
-        if os.path.exists(fc_path):
-            import json
-            fc = json.load(open(fc_path))
-            W = torch.tensor(fc["W"], dtype=probs.dtype, device=probs.device)
-            b = torch.tensor(fc["b"], dtype=probs.dtype, device=probs.device)
-            result["raw_probabilities"] = as_pct(probs)
-            probs = torch.softmax(W @ torch.log(probs + 1e-4) + b, dim=0)
+    # Facial-expression read on the detected face crop, via the FER head.
+    # Image-only requests use it as the verdict (personal calibration from
+    # docs/face-lab.html -> models/face_calibration.json when available,
+    # otherwise a fixed emotion->valence mapping); requests with text keep
+    # the fusion verdict and surface the expression as a component.
+    if face_values is not None and fer_model is not None:
+        with torch.no_grad():
+            fer_probs = torch.softmax(fer_model(pixel_values=face_values).logits, dim=1)[0]
+        result["face_expression"] = {l: round(float(p) * 100, 1)
+                                     for l, p in zip(fer_labels, fer_probs)}
+        if not text.strip():
+            result["raw_probabilities"] = as_pct(probs)  # fusion read, for reference
+            calib = None
+            fc_path = os.getenv("FACE_CALIBRATION", "models/face_calibration.json")
+            if os.path.exists(fc_path):
+                import json
+                fc = json.load(open(fc_path))
+                if fc.get("type") == "fer7":
+                    calib = fc
+            if calib is not None:
+                order = [fer_labels.index(l) for l in calib["labels"]]
+                x = torch.log(fer_probs[order] + 1e-4)
+                W = torch.tensor(calib["W"], dtype=x.dtype, device=x.device)
+                b = torch.tensor(calib["b"], dtype=x.dtype, device=x.device)
+                probs = torch.softmax(W @ x + b, dim=0)
+            else:
+                g = {l: float(p) for l, p in zip(fer_labels, fer_probs)}
+                mapped = torch.tensor(
+                    [g.get("neutral", 0.0),
+                     g.get("angry", 0.0) + g.get("disgust", 0.0)
+                     + g.get("fear", 0.0) + g.get("sad", 0.0),
+                     g.get("happy", 0.0) + g.get("surprise", 0.0)],
+                    device=probs.device)
+                probs = mapped / mapped.sum()
 
     if has_real_image and mtcnn is not None:
         result["face_detected"] = face_values is not None
