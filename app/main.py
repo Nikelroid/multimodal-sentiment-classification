@@ -47,6 +47,8 @@ try:
         vit_model_name=config.model.vision_backbone_name,
         audio_model_name=config.model.audio_model_name,
         use_audio=config.model.use_audio,
+        use_face=config.model.use_face,
+        face_model_name=config.model.face_model_name,
     ).to(device)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval()
