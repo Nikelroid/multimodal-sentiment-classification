@@ -66,4 +66,9 @@ jobs:
             --project "${{ secrets.GCP_PROJECT_ID }}" \
             --region "${{ inputs.region }}" --format 'value(status.url)')
           echo "Service URL: $URL"
-          curl -sf -X POST -F "text=I love this project!" "$URL/predict"
+          RESP=$(curl -sf -X POST -F "text=I love this project!" "$URL/predict")
+          echo "$RESP"
+          # HTTP 200 is not health: the app degrades gracefully to a dummy
+          # response when the model fails to load — fail the deploy on that.
+          echo "$RESP" | grep -q '"warning"' && { echo "MODEL DID NOT LOAD"; exit 1; }
+          echo "$RESP" | grep -q '"probabilities"' || { echo "unexpected response shape"; exit 1; }
