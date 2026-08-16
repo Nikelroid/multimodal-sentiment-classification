@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import torch
 import io
-import librosa
 from PIL import Image
 from transformers import AutoTokenizer, AutoImageProcessor
 from src.models.multimodal import MultimodalFusionNet
@@ -96,6 +95,7 @@ async def predict_sentiment(
         if len(waveform.shape) > 1:
             waveform = waveform.mean(axis=1)
         if sr != 16000:
+            import librosa  # optional dep; only needed to resample non-16kHz uploads
             waveform = librosa.resample(waveform, orig_sr=sr, target_sr=16000)
         audio_values = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).to(device)
     else:

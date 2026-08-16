@@ -1,0 +1,12 @@
+.git/
+.aider*
+__pycache__/
+*.pyc
+data/
+docs/
+notebooks/
+slurm/
+*.png
+*.pdf
+*.ipynb
+wandb/

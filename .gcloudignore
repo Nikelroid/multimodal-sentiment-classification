@@ -1,0 +1,15 @@
+# Upload only what the Docker build needs. Unlike .gitignore, this must NOT
+# exclude models/best_multimodal.pt — the checkpoint ships inside the image.
+.git/
+.gitignore
+.aider*
+__pycache__/
+*.pyc
+data/
+docs/
+notebooks/
+slurm/
+*.png
+*.pdf
+*.ipynb
+wandb/

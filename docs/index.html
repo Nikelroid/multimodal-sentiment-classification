@@ -217,8 +217,8 @@
 
       <div class="row">
         <div class="grow">
-          <label for="api">API endpoint</label>
-          <input type="text" id="api" value="http://localhost:8000">
+          <label for="api">API endpoint <span class="hint">— cloud by default, or point it at your own local server</span></label>
+          <input type="text" id="api">
         </div>
         <button id="analyze">Analyze sentiment</button>
       </div>
@@ -253,8 +253,14 @@ uvicorn app.main:app --port 8000</pre>
 </div>
 
 <script>
+  // Default inference endpoint. Set this to your Cloud Run URL once deployed;
+  // visitors can always override it in the field or with ?api=<url>.
+  const DEFAULT_API = "http://localhost:8000";
+
   const $ = (id) => document.getElementById(id);
   const COLORS = { Negative: "var(--neg)", Neutral: "var(--neu)", Positive: "var(--pos)" };
+
+  $("api").value = new URLSearchParams(location.search).get("api") || DEFAULT_API;
 
   document.querySelectorAll(".chip").forEach((chip) => {
     chip.addEventListener("click", () => { $("text").value = chip.textContent; });
