@@ -33,8 +33,10 @@ def main():
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    images = sorted(Path(args.images_dir).glob("*.jpg"), key=lambda p: int(p.stem))
-    images = [p for p in images if int(p.stem) % args.num_shards == args.shard]
+    # Shard by sorted position so non-numeric stems (e.g. MELD's diaD_uttU)
+    # work the same as MSCTD's numeric frame names.
+    images = sorted(Path(args.images_dir).glob("*.jpg"))
+    images = [p for i, p in enumerate(images) if i % args.num_shards == args.shard]
     found = skipped = 0
     for n, path in enumerate(images):
         dst = out / path.name
