@@ -57,6 +57,21 @@ except Exception as e:
     print(f"Warning: Model weights not found or failed to load. Will run dummy predictions. Error: {e}")
     model = None
 
+# Optional speech-tone model (late fusion). Missing checkpoint just disables it.
+AUDIO_MODEL_PATH = os.getenv("AUDIO_MODEL_PATH", "models/audio_sentiment.pt")
+audio_model, audio_fe = None, None
+try:
+    from transformers import WhisperFeatureExtractor
+    from src.models.audio_sentiment import AudioSentimentModel
+    audio_model = AudioSentimentModel().to(device)
+    audio_model.load_state_dict(torch.load(AUDIO_MODEL_PATH, map_location=device))
+    audio_model.eval()
+    audio_fe = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+    print("Speech-tone model loaded.")
+except Exception as e:
+    print(f"Speech-tone model disabled ({e}).")
+    audio_model = None
+
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
@@ -89,6 +104,7 @@ async def predict_sentiment(
         pixel_values = feature_extractor(images=blank, return_tensors="pt")["pixel_values"].to(device)
 
     # 3. Process Audio
+    waveform_np = None
     if audio and audio.filename:
         aud_bytes = await audio.read()
         import soundfile as sf
@@ -99,21 +115,48 @@ async def predict_sentiment(
         if sr != 16000:
             import librosa  # optional dep; only needed to resample non-16kHz uploads
             waveform = librosa.resample(waveform, orig_sr=sr, target_sr=16000)
-        audio_values = torch.tensor(waveform, dtype=torch.float32).unsqueeze(0).to(device)
+        waveform_np = waveform.astype("float32")
+        audio_values = torch.tensor(waveform_np).unsqueeze(0).to(device)
     else:
         audio_values = torch.zeros((1, 16000)).to(device)
-
-    # Prediction
-    with torch.no_grad():
-        logits = model(input_ids, attention_mask, pixel_values, audio_values)
-        probs = torch.softmax(logits, dim=1)
-        pred_idx = probs.argmax(dim=1).item()
-        confidence = probs[0, pred_idx].item()
 
     # MSCTD label encoding (per the dataset README): neutral: 0, negative: 1, positive: 2
     classes = ["Neutral", "Negative", "Positive"]
 
-    return {"sentiment": classes[pred_idx], "confidence": round(confidence, 4)}
+    # Prediction (text + image)
+    with torch.no_grad():
+        logits = model(input_ids, attention_mask, pixel_values, audio_values)
+        probs = torch.softmax(logits, dim=1)[0]
+
+    result = {}
+
+    # Confidence-modulated late fusion with the speech-tone model: each
+    # component's prior is scaled by its certainty (1 - normalized entropy),
+    # so a confident voice read outweighs an unsure text read and vice versa.
+    if waveform_np is not None and audio_model is not None:
+        feats = audio_fe(waveform_np, sampling_rate=16000,
+                         return_tensors="pt")["input_features"].to(device)
+        with torch.no_grad():
+            audio_probs = torch.softmax(audio_model(feats), dim=1)[0]
+
+        def certainty(p):
+            entropy = -(p * (p + 1e-9).log()).sum()
+            return float(1 - entropy / torch.log(torch.tensor(float(len(p)))))
+
+        prior_mm = 0.6 if text.strip() else 0.35   # voice leads when there is no text
+        w_mm = prior_mm * certainty(probs)
+        w_audio = (1 - prior_mm) * certainty(audio_probs)
+        total = w_mm + w_audio + 1e-9
+        result["components"] = {
+            "text_image": classes[probs.argmax().item()],
+            "voice_tone": classes[audio_probs.argmax().item()],
+        }
+        probs = (w_mm * probs + w_audio * audio_probs) / total
+
+    pred_idx = probs.argmax().item()
+    result.update({"sentiment": classes[pred_idx],
+                   "confidence": round(probs[pred_idx].item(), 4)})
+    return result
 
 if __name__ == "__main__":
     import uvicorn

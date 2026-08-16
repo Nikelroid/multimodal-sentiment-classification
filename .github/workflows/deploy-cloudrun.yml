@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p models
           gh release download "${{ inputs.release_tag }}" \
-            --pattern best_multimodal.pt --dir models
+            --pattern '*.pt' --dir models
           ls -lh models/
 
       - uses: google-github-actions/auth@v2

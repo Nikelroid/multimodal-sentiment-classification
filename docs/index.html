@@ -469,7 +469,12 @@ uvicorn app.main:app --port 8000</pre>
       const bar = $("meterBar");
       bar.style.background = COLORS[label] || "var(--accent)";
       bar.style.width = "0";
-      $("resultNote").textContent = data.warning ? "⚠ " + data.warning : "";
+      let note = data.warning ? "⚠ " + data.warning : "";
+      if (data.components) {
+        note = `text+image read: ${data.components.text_image} · voice tone read: ${data.components.voice_tone}` +
+               (note ? " · " + note : "");
+      }
+      $("resultNote").textContent = note;
       $("result").style.display = "block";
       requestAnimationFrame(() => { bar.style.width = Math.max(4, conf * 100) + "%"; });
     } catch (err) {

@@ -31,6 +31,27 @@ gradient clipping, bf16 autocast, and best-model selection on validation
 macro-F1 with early stopping. The released checkpoint stores weights in fp16
 (1.3 GB) and casts to fp32 on load.
 
+### 🎙 Speech-tone model (voice sentiment)
+
+MSCTD ships no audio, so the voice pathway is trained on real emotional speech
+— **RAVDESS + CREMA-D (9,758 clips)** mapped to the same sentiment ids — and
+fused with the multimodal model at decision level:
+
+| Component | Val accuracy (speaker-independent) | Checkpoint |
+|---|---|---|
+| Whisper-base encoder (frozen) + learned layer mix + MLP head | **82.1%** | 40 MB (fp16) |
+
+Two techniques worth noting:
+
+- **Learnable layer weighting** (SUPERB-style) over all frozen Whisper encoder
+  layers. Training assigned the highest weight (0.21) to **layer 3 — the exact
+  middle of the encoder** — confirming that intermediate layers carry the most
+  prosodic/emotional information.
+- **Confidence-modulated late fusion**: each component's modality prior is
+  scaled by its prediction certainty (1 − normalized entropy), so a confident
+  angry voice outweighs an unsure text read, and voice takes the lead
+  automatically when no text is provided.
+
 ## 🚀 Key Features
 
 * **Multi-Modal Fusion**: text (`RoBERTa-large`), image (`DINOv2-large`), optional audio (`wav2vec2`) — concatenated and classified by a LayerNorm/GELU head. Backbones are config-swappable; embedding sizes are derived automatically.
@@ -83,5 +104,9 @@ See `deploy/README.md` — one `gcloud run deploy` command, or the
 ## Audio Processing Note 🎵
 
 Audio is optional end-to-end: the playground records 16 kHz mono WAV in the
-browser, the API accepts it, and the model consumes it when trained with
-`use_audio: true` (MSCTD ships no audio, so the default model ignores it).
+browser, and when `models/audio_sentiment.pt` is present the API runs the
+speech-tone model and fuses it with the text+image prediction (the response's
+`components` field shows each modality's read). Train your own with
+`python src/pipelines/train_audio.py --audio_dir <RAVDESS> <CREMA-D>`; a
+two-stage fine-tune (`--unfreeze_top N`) and a Whisper-small variant
+(`slurm/train_audio_whisper_small.job`) are included.

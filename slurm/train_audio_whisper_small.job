@@ -1,0 +1,38 @@
+#!/bin/bash
+#SBATCH --job-name=audio-sent-small
+#SBATCH --account=msoleyma_946
+#SBATCH --partition=gpu
+#SBATCH --gres=gpu:v100:1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=32G
+#SBATCH --time=1:30:00
+#SBATCH --output=/scratch1/kelidari/audio_sent_small_%j.log
+
+# Self-contained: whisper-small speech-tone sentiment, stage 1 (frozen encoder,
+# learnable layer weights) then stage 2 (top-4 encoder layers fine-tuned).
+# Results land in the repo's models/ dir and this log — survives any session.
+set -uo pipefail
+module purge
+export WANDB_MODE=offline HF_HUB_DISABLE_PROGRESS_BARS=1
+export HF_HOME=/scratch1/kelidari/hf_cache
+
+cd /home1/kelidari/multimodal-sentiment-classification
+P=/home1/kelidari/miniconda/envs/ser_env/bin/python
+
+echo "=== STAGE 1: frozen encoder ==="
+$P -u src/pipelines/train_audio.py \
+  --audio_dir /scratch1/kelidari/ser_data/RAVDESS /scratch1/kelidari/ser_data/CREMA-D \
+  --model_name openai/whisper-small \
+  --epochs 8 --batch_size 16 \
+  --out models/audio_sentiment_small.pt
+
+echo "=== STAGE 2: fine-tune top 4 encoder layers ==="
+$P -u src/pipelines/train_audio.py \
+  --audio_dir /scratch1/kelidari/ser_data/RAVDESS /scratch1/kelidari/ser_data/CREMA-D \
+  --model_name openai/whisper-small \
+  --init models/audio_sentiment_small.pt \
+  --unfreeze_top 4 --encoder_lr 1e-5 --lr 1e-4 \
+  --epochs 6 --batch_size 16 \
+  --out models/audio_sentiment_small_ft.pt
+
+echo "=== DONE ==="
