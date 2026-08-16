@@ -105,6 +105,27 @@
     background: var(--surface); color: var(--ink); cursor: pointer;
   }
   #imgPreview { display: none; margin-top: 10px; max-height: 120px; max-width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+  .cap-row { display: flex; gap: 8px; align-items: center; }
+  .cap-row input[type="file"] { flex: 1; min-width: 0; }
+  button.mini {
+    flex-shrink: 0; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+    font: 600 13px system-ui; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink); white-space: nowrap;
+  }
+  button.mini:hover { border-color: var(--accent); color: var(--accent); }
+  button.mini.recording {
+    border-color: var(--neg); color: var(--neg);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  button.mini.ghost { color: var(--muted); }
+  @keyframes pulse { 50% { opacity: .55; } }
+  .cam-panel { display: none; margin-top: 10px; }
+  .cam-panel video {
+    width: 100%; max-height: 220px; border-radius: 8px;
+    border: 1px solid var(--line); background: #000; object-fit: cover;
+  }
+  .cap-actions { display: flex; gap: 8px; margin-top: 8px; }
+  #audPreview { display: none; margin-top: 10px; width: 100%; height: 36px; }
   .row { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; margin-top: 22px; }
   .row .grow { flex: 1 1 260px; }
   .row label { margin: 0 0 6px; }
@@ -205,13 +226,28 @@
       <label style="margin-top:22px">Optional modalities</label>
       <div class="uploads">
         <div>
-          <span class="hint">Image (jpg/png)</span>
-          <input type="file" id="image" accept="image/*">
+          <span class="hint">Image — upload or use your camera</span>
+          <div class="cap-row">
+            <input type="file" id="image" accept="image/*">
+            <button type="button" class="mini" id="camBtn">📷 Camera</button>
+          </div>
+          <div id="camPanel" class="cam-panel">
+            <video id="camVideo" autoplay playsinline muted></video>
+            <div class="cap-actions">
+              <button type="button" class="mini" id="snapBtn">Capture</button>
+              <button type="button" class="mini ghost" id="camCancel">Cancel</button>
+            </div>
+          </div>
           <img id="imgPreview" alt="preview">
         </div>
         <div>
-          <span class="hint">Audio (wav)</span>
-          <input type="file" id="audio" accept="audio/*">
+          <span class="hint">Audio — upload or record your voice</span>
+          <div class="cap-row">
+            <input type="file" id="audio" accept="audio/*">
+            <button type="button" class="mini" id="recBtn">🎙 Record</button>
+          </div>
+          <audio id="audPreview" controls></audio>
+          <div class="hint" id="capNote"></div>
         </div>
       </div>
 
@@ -266,11 +302,136 @@ uvicorn app.main:app --port 8000</pre>
     chip.addEventListener("click", () => { $("text").value = chip.textContent; });
   });
 
+  // ---- captured-media state (webcam snapshot / voice recording) ----
+  let capturedImage = null;   // Blob (jpeg) from webcam
+  let capturedAudio = null;   // Blob (16 kHz mono wav) from microphone
+
   $("image").addEventListener("change", () => {
+    capturedImage = null;
     const f = $("image").files[0];
     const img = $("imgPreview");
     if (f) { img.src = URL.createObjectURL(f); img.style.display = "block"; }
     else { img.style.display = "none"; }
+  });
+
+  $("audio").addEventListener("change", () => {
+    capturedAudio = null;
+    $("audPreview").style.display = "none";
+    $("capNote").textContent = "";
+  });
+
+  // ---- webcam capture ----
+  let camStream = null;
+
+  function closeCam() {
+    if (camStream) { camStream.getTracks().forEach((t) => t.stop()); camStream = null; }
+    $("camPanel").style.display = "none";
+  }
+
+  $("camBtn").addEventListener("click", async () => {
+    if (camStream) { closeCam(); return; }
+    try {
+      camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      $("camVideo").srcObject = camStream;
+      $("camPanel").style.display = "block";
+    } catch (err) {
+      $("capNote").textContent = "Camera unavailable: " + err.message;
+    }
+  });
+
+  $("camCancel").addEventListener("click", closeCam);
+
+  $("snapBtn").addEventListener("click", () => {
+    const v = $("camVideo");
+    if (!v.videoWidth) return;
+    const c = document.createElement("canvas");
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext("2d").drawImage(v, 0, 0);
+    c.toBlob((blob) => {
+      capturedImage = blob;
+      $("image").value = "";                       // capture replaces any chosen file
+      const img = $("imgPreview");
+      img.src = URL.createObjectURL(blob);
+      img.style.display = "block";
+      closeCam();
+    }, "image/jpeg", 0.92);
+  });
+
+  // ---- voice recording -> 16 kHz mono WAV (matches the model's input rate) ----
+  let recState = null; // {stream, ctx, node, chunks, timer, seconds}
+  const MAX_REC_SECONDS = 15;
+
+  function encodeWav(samples, sampleRate) {
+    const buf = new ArrayBuffer(44 + samples.length * 2);
+    const dv = new DataView(buf);
+    const writeStr = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+    writeStr(0, "RIFF"); dv.setUint32(4, 36 + samples.length * 2, true); writeStr(8, "WAVE");
+    writeStr(12, "fmt "); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+    dv.setUint16(22, 1, true); dv.setUint32(24, sampleRate, true);
+    dv.setUint32(28, sampleRate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+    writeStr(36, "data"); dv.setUint32(40, samples.length * 2, true);
+    for (let i = 0; i < samples.length; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    }
+    return new Blob([buf], { type: "audio/wav" });
+  }
+
+  async function stopRecording() {
+    const r = recState;
+    recState = null;
+    clearInterval(r.timer);
+    $("recBtn").classList.remove("recording");
+    $("recBtn").textContent = "🎙 Record";
+    r.node.disconnect();
+    r.stream.getTracks().forEach((t) => t.stop());
+    const inputRate = r.ctx.sampleRate;
+    await r.ctx.close();
+
+    const total = r.chunks.reduce((n, c) => n + c.length, 0);
+    if (!total) return;
+    const pcm = new Float32Array(total);
+    let off = 0;
+    for (const c of r.chunks) { pcm.set(c, off); off += c.length; }
+
+    // Resample to 16 kHz with OfflineAudioContext so the server needs no resampler.
+    const targetLen = Math.max(1, Math.round(total * 16000 / inputRate));
+    const oac = new OfflineAudioContext(1, targetLen, 16000);
+    const srcBuf = oac.createBuffer(1, total, inputRate);
+    srcBuf.copyToChannel(pcm, 0);
+    const src = oac.createBufferSource();
+    src.buffer = srcBuf; src.connect(oac.destination); src.start();
+    const rendered = await oac.startRendering();
+
+    capturedAudio = encodeWav(rendered.getChannelData(0), 16000);
+    $("audio").value = "";                          // recording replaces any chosen file
+    const player = $("audPreview");
+    player.src = URL.createObjectURL(capturedAudio);
+    player.style.display = "block";
+    $("capNote").textContent = `Recorded ${(targetLen / 16000).toFixed(1)}s of audio.`;
+  }
+
+  $("recBtn").addEventListener("click", async () => {
+    if (recState) { stopRecording(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = ctx.createMediaStreamSource(stream);
+      const node = ctx.createScriptProcessor(4096, 1, 1);
+      const chunks = [];
+      node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      source.connect(node); node.connect(ctx.destination);
+      recState = { stream, ctx, node, chunks, seconds: 0, timer: null };
+      recState.timer = setInterval(() => {
+        recState.seconds += 1;
+        $("recBtn").textContent = `⏹ Stop (0:${String(recState.seconds).padStart(2, "0")})`;
+        if (recState.seconds >= MAX_REC_SECONDS) stopRecording();
+      }, 1000);
+      $("recBtn").classList.add("recording");
+      $("recBtn").textContent = "⏹ Stop (0:00)";
+    } catch (err) {
+      $("capNote").textContent = "Microphone unavailable: " + err.message;
+    }
   });
 
   $("analyze").addEventListener("click", async () => {
@@ -284,8 +445,10 @@ uvicorn app.main:app --port 8000</pre>
 
     const form = new FormData();
     form.append("text", text);
-    if ($("image").files[0]) form.append("image", $("image").files[0]);
-    if ($("audio").files[0]) form.append("audio", $("audio").files[0]);
+    if (capturedImage) form.append("image", capturedImage, "webcam.jpg");
+    else if ($("image").files[0]) form.append("image", $("image").files[0]);
+    if (capturedAudio) form.append("audio", capturedAudio, "recording.wav");
+    else if ($("audio").files[0]) form.append("audio", $("audio").files[0]);
 
     const base = $("api").value.trim().replace(/\/+$/, "");
     try {
