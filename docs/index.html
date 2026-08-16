@@ -516,6 +516,7 @@ uvicorn app.main:app --port 8000</pre>
       }
       if (data.face_detected === true) lines.push("🙂 face detected — expression branch active");
       if (data.face_detected === false) lines.push("😐 no face found in image — expression branch idle (scenes alone carry little signal)");
+      if (data.face_note) lines.push("⚠ " + data.face_note);
       if (data.warning) lines.push("⚠ " + data.warning);
       $("resultNote").innerHTML = lines.join("<br>");
       $("result").style.display = "block";

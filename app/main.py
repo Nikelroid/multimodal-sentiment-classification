@@ -238,6 +238,9 @@ async def predict_sentiment(
 
     if has_real_image and mtcnn is not None:
         result["face_detected"] = face_values is not None
+    elif has_real_image and config.model.use_face and mtcnn is None:
+        result["face_note"] = ("face detector not installed on this server - "
+                               "pip install --no-deps facenet-pytorch and restart")
 
     pred_idx = probs.argmax().item()
     result.update({"sentiment": classes[pred_idx],
