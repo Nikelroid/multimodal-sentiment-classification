@@ -198,7 +198,8 @@ async def predict_sentiment(
             calib = json.load(open(calib_path))
             W = torch.tensor(calib["W"], dtype=audio_probs.dtype, device=audio_probs.device)
             b = torch.tensor(calib["b"], dtype=audio_probs.dtype, device=audio_probs.device)
-            audio_probs = torch.softmax(W @ torch.log(audio_probs + 1e-9) + b, dim=0)
+            # eps must match the fitting code (log(p + 1e-4))
+            audio_probs = torch.softmax(W @ torch.log(audio_probs + 1e-4) + b, dim=0)
         else:
             cutoff = float(os.getenv("VOICE_NEUTRAL_CUTOFF", "0.85"))
             damp = float(os.getenv("VOICE_NEUTRAL_DAMP", "0.3"))
