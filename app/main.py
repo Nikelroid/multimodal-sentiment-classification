@@ -185,9 +185,25 @@ async def predict_sentiment(
         with torch.no_grad():
             audio_probs = torch.softmax(audio_model(feats), dim=1)[0]
 
+        # Conversational-speech calibration (fit on a 3 sentences x 3 moods
+        # user grid): real speech is milder than the acted training corpora, so
+        # Neutral dominates in absolute terms even when Neg/Pos are clearly
+        # elevated above their neutral-speech baselines. If Neutral is not
+        # overwhelming, hand the decision to the emotional classes, with a
+        # boost for Positive (the most undertrained class). Tune via env.
+        cutoff = float(os.getenv("VOICE_NEUTRAL_CUTOFF", "0.85"))
+        damp = float(os.getenv("VOICE_NEUTRAL_DAMP", "0.3"))
+        boost = float(os.getenv("VOICE_POSITIVE_BOOST", "2.2"))
+        raw_audio_probs = audio_probs.clone()
+        if audio_probs[0] < cutoff:
+            audio_probs = audio_probs * torch.tensor([damp, 1.0, boost], device=audio_probs.device)
+            audio_probs = audio_probs / audio_probs.sum()
+
         result["components"] = {
             "text_image": {"label": classes[probs.argmax().item()], "probabilities": as_pct(probs)},
-            "voice_tone": {"label": classes[audio_probs.argmax().item()], "probabilities": as_pct(audio_probs)},
+            "voice_tone": {"label": classes[audio_probs.argmax().item()],
+                           "probabilities": as_pct(audio_probs),
+                           "raw_probabilities": as_pct(raw_audio_probs)},
         }
 
         if not text.strip() and not has_real_image:
