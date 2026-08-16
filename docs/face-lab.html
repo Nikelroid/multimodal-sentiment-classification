@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Face Calibration Lab</title>
+<style>
+  :root {
+    --bg:#fafaf8; --surface:#fff; --ink:#17211f; --muted:#5c6a66;
+    --line:#e3e5e0; --accent:#0d7a6c;
+    --neg:#c94f42; --neu:#b98a2e; --pos:#2e8b57;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{--bg:#101413;--surface:#181d1c;--ink:#e8ecea;--muted:#93a19c;--line:#262d2b;--accent:#35b39f;}
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 24px 80px}
+  h1{font-size:26px;margin-bottom:6px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:24px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:22px;margin-bottom:18px}
+  label{font-weight:600;font-size:13px;display:block;margin-bottom:6px}
+  input[type=text],input[type=number]{padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit}
+  button{padding:10px 22px;border-radius:8px;border:none;cursor:pointer;background:var(--accent);color:#fff;font:600 15px system-ui}
+  button.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+  .emo{font:700 34px system-ui;margin:8px 0}
+  .emo.sad,.emo.angry,.emo.disgusted,.emo.worried{color:var(--neg)}
+  .emo.neutral{color:var(--neu)} .emo.happy,.emo.excited{color:var(--pos)}
+  video{width:100%;max-height:320px;border-radius:10px;border:1px solid var(--line);background:#000;object-fit:cover;transform:scaleX(-1)}
+  .progress{height:8px;border-radius:999px;background:var(--line);margin:14px 0;overflow:hidden}
+  .progress>div{height:100%;background:var(--accent);transition:width .3s}
+  .big{font:700 44px var(--mono);text-align:center;margin:6px 0;min-height:56px}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:10px}
+  th,td{border:1px solid var(--line);padding:6px 8px;text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  textarea{width:100%;font:12px/1.5 var(--mono);background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:10px}
+  .hint{color:var(--muted);font-size:13px}
+  .row{display:flex;gap:12px;align-items:end;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📷 Face Calibration Lab</h1>
+  <p class="sub">Hold each expression while the camera auto-captures. Big theatrical
+  expressions work best — you're generating training data, not a passport photo.</p>
+
+  <div class="card" id="setup">
+    <div class="row">
+      <div><label>API endpoint</label><input type="text" id="api" size="28"></div>
+      <div><label>Shots per emotion</label><input type="number" id="reps" value="8" min="4" max="12" style="width:70px"></div>
+      <div><label>Interval (s)</label><input type="number" id="interval" value="2.5" step="0.5" min="1.5" max="5" style="width:70px"></div>
+      <button id="start">Start session</button>
+    </div>
+    <p class="hint" style="margin-top:10px">7 emotions × 8 shots ≈ 5 minutes: sad, angry, disgusted, worried, neutral,
+    happy, excited. Shots without a detected face are recorded and flagged.</p>
+  </div>
+
+  <div class="card" id="taskCard" style="display:none">
+    <div class="hint" id="taskCount"></div>
+    <div class="progress"><div id="bar" style="width:0"></div></div>
+    <div>Make and hold a <span class="emo" id="emo"></span> face</div>
+    <video id="cam" autoplay playsinline muted></video>
+    <div class="big" id="countdown"></div>
+    <div class="row">
+      <button id="go">Start capturing this emotion</button>
+      <span class="hint" id="status"></span>
+    </div>
+  </div>
+
+  <div class="card" id="results" style="display:none">
+    <h1 style="font-size:20px">Results</h1>
+    <div id="avgTable"></div>
+    <label style="margin-top:16px">Paste this whole block back to Claude:</label>
+    <textarea id="export" rows="14" readonly></textarea>
+    <div class="row" style="margin-top:10px">
+      <button id="copy">Copy to clipboard</button>
+      <button class="ghost" id="restart">New session</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const EMOTIONS = ["sad", "angry", "disgusted", "worried", "neutral", "happy", "excited"];
+const $ = (id) => document.getElementById(id);
+$("api").value = new URLSearchParams(location.search).get("api") || "http://localhost:8000";
+
+let rows = JSON.parse(localStorage.getItem("facelab_rows") || "[]");
+let emoIdx = 0, stream = null, reps = 8, interval = 2500;
+
+$("start").addEventListener("click", async () => {
+  reps = parseInt($("reps").value) || 8;
+  interval = (parseFloat($("interval").value) || 2.5) * 1000;
+  rows = []; localStorage.removeItem("facelab_rows"); emoIdx = 0;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+  } catch (err) { alert("Camera error: " + err.message); return; }
+  $("cam").srcObject = stream;
+  $("setup").style.display = "none"; $("results").style.display = "none";
+  showEmotion();
+});
+
+function showEmotion() {
+  if (emoIdx >= EMOTIONS.length) return finish();
+  const e = EMOTIONS[emoIdx];
+  $("taskCard").style.display = "block";
+  $("taskCount").textContent = `Emotion ${emoIdx + 1} of ${EMOTIONS.length}`;
+  $("bar").style.width = (100 * emoIdx / EMOTIONS.length) + "%";
+  $("emo").textContent = e.toUpperCase();
+  $("emo").className = "emo " + e;
+  $("countdown").textContent = "";
+  $("go").style.display = "inline-block";
+  $("status").textContent = "";
+}
+
+$("go").addEventListener("click", async () => {
+  $("go").style.display = "none";
+  for (let c = 3; c > 0; c--) { $("countdown").textContent = c; await sleep(800); }
+  const emo = EMOTIONS[emoIdx];
+  for (let shot = 1; shot <= reps; shot++) {
+    $("countdown").textContent = `📸 ${shot}/${reps}`;
+    await captureAndScore(emo, shot);
+    if (shot < reps) await sleep(interval);
+  }
+  emoIdx++; showEmotion();
+});
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function grabFrame() {
+  const v = $("cam"), c = document.createElement("canvas");
+  c.width = v.videoWidth; c.height = v.videoHeight;
+  c.getContext("2d").drawImage(v, 0, 0);
+  return new Promise((res) => c.toBlob(res, "image/jpeg", 0.92));
+}
+
+async function captureAndScore(emo, shot) {
+  try {
+    const blob = await grabFrame();
+    const form = new FormData();
+    form.append("text", "");
+    form.append("image", blob, "shot.jpg");
+    const base = $("api").value.trim().replace(/\/+$/, "");
+    const res = await fetch(base + "/predict", { method: "POST", body: form });
+    const d = await res.json();
+    const p = d.raw_probabilities || d.probabilities || {};
+    rows.push({ emo, shot, face: d.face_detected === true ? 1 : 0,
+                neu: p.Neutral ?? -1, neg: p.Negative ?? -1, pos: p.Positive ?? -1 });
+    localStorage.setItem("facelab_rows", JSON.stringify(rows));
+    $("status").textContent = (d.face_detected ? "🙂 " : "😐 no face — ") +
+      `Neu ${p.Neutral}% Neg ${p.Negative}% Pos ${p.Positive}%`;
+  } catch (err) {
+    rows.push({ emo, shot, face: -1, neu: -1, neg: -1, pos: -1 });
+    $("status").textContent = "request failed: " + err.message;
+  }
+}
+
+function finish() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  $("taskCard").style.display = "none";
+  $("results").style.display = "block";
+  const cells = {};
+  for (const r of rows) (cells[r.emo] = cells[r.emo] || []).push(r);
+  let html = "<table><tr><th>emotion</th><th>shots</th><th>faces found</th><th>avg Neu</th><th>avg Neg</th><th>avg Pos</th></tr>";
+  for (const [emo, list] of Object.entries(cells)) {
+    const ok = list.filter((r) => r.face === 1);
+    const avg = (f) => ok.length ? (ok.reduce((a, r) => a + r[f], 0) / ok.length).toFixed(1) : "—";
+    html += `<tr><td>${emo}</td><td>${list.length}</td><td>${ok.length}</td><td>${avg("neu")}</td><td>${avg("neg")}</td><td>${avg("pos")}</td></tr>`;
+  }
+  $("avgTable").innerHTML = html + "</table>";
+  const lines = ["FACE CALIBRATION RESULTS v1", "emotion,shot,face_detected,neu,neg,pos"];
+  for (const r of rows) lines.push(`${r.emo},${r.shot},${r.face},${r.neu},${r.neg},${r.pos}`);
+  $("export").value = lines.join("\n");
+}
+
+$("copy").addEventListener("click", () => {
+  $("export").select(); document.execCommand("copy");
+  $("copy").textContent = "Copied ✓"; setTimeout(() => $("copy").textContent = "Copy to clipboard", 1500);
+});
+$("restart").addEventListener("click", () => location.reload());
+if (rows.length) finish();
+</script>
+</body>
+</html>

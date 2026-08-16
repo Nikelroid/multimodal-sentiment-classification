@@ -236,6 +236,19 @@ async def predict_sentiment(
             w_audio = (1 - prior_mm) * certainty(audio_probs)
             probs = (w_mm * probs + w_audio * audio_probs) / (w_mm + w_audio + 1e-9)
 
+    # Face-driven calibration (image-only requests with a detected face):
+    # analogous to the voice calibration, fitted from docs/face-lab.html
+    # sessions -> models/face_calibration.json.
+    if not text.strip() and face_values is not None:
+        fc_path = os.getenv("FACE_CALIBRATION", "models/face_calibration.json")
+        if os.path.exists(fc_path):
+            import json
+            fc = json.load(open(fc_path))
+            W = torch.tensor(fc["W"], dtype=probs.dtype, device=probs.device)
+            b = torch.tensor(fc["b"], dtype=probs.dtype, device=probs.device)
+            result["raw_probabilities"] = as_pct(probs)
+            probs = torch.softmax(W @ torch.log(probs + 1e-4) + b, dim=0)
+
     if has_real_image and mtcnn is not None:
         result["face_detected"] = face_values is not None
     elif has_real_image and config.model.use_face and mtcnn is None:
