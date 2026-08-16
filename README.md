@@ -62,6 +62,15 @@ Two techniques worth noting:
   angry voice outweighs an unsure text read, and voice takes the lead
   automatically when no text is provided.
 
+## 🛠 Engineering Highlights (MLOps / production-ML)
+
+* **CI on every push** — [`ci.yml`](.github/workflows/ci.yml): ruff lint + 17 unit tests over configs, data loading, and collation (CPU-only torch, cached installs).
+* **One-click CD** — [`deploy-cloudrun.yml`](.github/workflows/deploy-cloudrun.yml): fetches versioned model artifacts from a GitHub Release, builds a container with backbones baked in (cold starts never touch the Hub), deploys scale-to-zero Cloud Run, and smoke-tests a live prediction.
+* **Model registry via GitHub Releases** — fp16-stored checkpoints (halved size to fit release limits, verified metric-identical), replaceable in place; serving code and artifacts version together.
+* **Evaluation rigor** — five model variants compared on a fixed held-out test split with macro-F1, speaker-independent splits for audio, leave-one-out validation for calibration; every number in this README is reproducible from the pipelines in `src/`.
+* **Failure-driven iteration** (see commit history): a label-mapping bug caught by live testing and fixed against dataset docs; consumer-mic noise flipping predictions, diagnosed with a controlled experiment and fixed via training-time augmentation; a test-path bug that silently blanked evaluation images, found and re-benchmarked.
+* **Human-in-the-loop calibration** — a browser [calibration lab](docs/lab.html) collects per-speaker recordings and fits a learned transform (logistic on log-probs) that the server hot-loads; 83% → 91.7% on the owner's voice.
+
 ## 🚀 Key Features
 
 * **Multi-Modal Fusion**: text (`RoBERTa-large`), image (`DINOv2-large`), optional audio (`wav2vec2`) — concatenated and classified by a LayerNorm/GELU head. Backbones are config-swappable; embedding sizes are derived automatically.
