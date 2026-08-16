@@ -23,7 +23,9 @@ jobs:
                       nltk emoji sentencepiece protobuf pytest ruff
 
       - name: Lint
-        run: ruff check .
+        run: |
+          ruff --version
+          ruff check . --output-format github
 
       - name: Unit tests
         run: pytest -q

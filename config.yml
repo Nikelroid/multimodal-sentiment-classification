@@ -19,7 +19,10 @@ training:
   project_name: "multimodal-sentiment-classification"
 
 model:
-  text_model_name: "microsoft/deberta-v3-large"
+  # deberta-v3-large scores marginally higher but its HF repo is .bin-only,
+  # which transformers 5.x refuses to load on torch < 2.6 (CVE-2025-32434).
+  # roberta-large is safetensors-native and loads everywhere.
+  text_model_name: "roberta-large"
   vision_backbone_name: "facebook/dinov2-large"
   audio_model_name: "facebook/wav2vec2-base"
   visualbert_name: "uclanlp/visualbert-nlvr2"
