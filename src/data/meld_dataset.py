@@ -58,4 +58,13 @@ def load_split(processed, split, context=2, sep=" </s> "):
     df["wav"] = df.key.map(lambda k: str(processed / "audio" / split / f"{k}.wav"))
     face = df.key.map(lambda k: processed / "faces" / split / f"{k}.jpg")
     df["face"] = [str(p) if p.exists() else "" for p in face]
+    # Crops from the 25/50/75% frames (extract_frames_multi.py), ';'-joined
+    multi_dir = processed / "faces3" / split
+    if multi_dir.is_dir():
+        df["face_multi"] = [
+            ";".join(str(p) for p in (multi_dir / f"{k}_p{pos}.jpg" for pos in (25, 50, 75))
+                     if p.exists())
+            for k in df.key]
+    else:
+        df["face_multi"] = df["face"]
     return df

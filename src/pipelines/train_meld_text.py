@@ -81,7 +81,9 @@ def main():
     tok = AutoTokenizer.from_pretrained(args.model_name)
     loaders = []
     for split, shuffle in [("train", True), ("dev", False), ("test", False)]:
-        df = load_split(args.processed, split, context=args.context)
+        # Join context turns with the model's own separator token.
+        df = load_split(args.processed, split, context=args.context,
+                        sep=f" {tok.sep_token} ")
         loaders.append(DataLoader(TextDataset(df, tok, args.max_len),
                                   batch_size=args.batch_size, shuffle=shuffle,
                                   num_workers=4, pin_memory=True))

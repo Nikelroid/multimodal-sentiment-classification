@@ -24,11 +24,14 @@ from src.pipelines.meld_common import evaluate, fit
 
 
 class FaceDataset(Dataset):
-    def __init__(self, df, mean, std, augment):
-        df = df[df.face != ""].reset_index(drop=True)
-        self.paths = df.face.tolist()
-        self.emotions = df.emotion_id.tolist()
-        self.sentiments = df.label.tolist()
+    def __init__(self, df, mean, std, augment, multi=False):
+        self.paths, self.emotions, self.sentiments = [], [], []
+        col = "face_multi" if multi else "face"
+        for _, r in df[df[col] != ""].iterrows():
+            for p in str(r[col]).split(";"):
+                self.paths.append(p)
+                self.emotions.append(r.emotion_id)
+                self.sentiments.append(r.label)
         aug = [transforms.RandomHorizontalFlip(),
                transforms.ColorJitter(0.2, 0.2, 0.1)] if augment else []
         self.tf = transforms.Compose(
@@ -57,6 +60,8 @@ def main():
     ap.add_argument("--epochs", type=int, default=6)
     ap.add_argument("--lr", type=float, default=2e-5)
     ap.add_argument("--head_lr", type=float, default=5e-4)
+    ap.add_argument("--multi", action="store_true",
+                    help="train on all 25/50/75%% frame crops per utterance")
     ap.add_argument("--out", default="models/meld_face.pt")
     args = ap.parse_args()
 
@@ -68,8 +73,9 @@ def main():
     loaders = []
     for split, train in [("train", True), ("dev", False), ("test", False)]:
         df = load_split(args.processed, split)
-        ds = FaceDataset(df, proc.image_mean, proc.image_std, augment=train)
-        print(f"{split}: {len(ds)} utterances with a face")
+        ds = FaceDataset(df, proc.image_mean, proc.image_std, augment=train,
+                         multi=args.multi)
+        print(f"{split}: {len(ds)} face crops")
         loaders.append(DataLoader(ds, batch_size=args.batch_size, shuffle=train,
                                   num_workers=6, pin_memory=True))
 

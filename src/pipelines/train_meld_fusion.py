@@ -1,12 +1,12 @@
-"""Late-fusion head over the three MELD-fine-tuned modality models.
+"""Late-fusion head over the MELD-fine-tuned modality models.
 
-Stage 1 caches, for every utterance, each modality's probabilities AND
-penultimate features (text mean-pooled state, Whisper layer-mix, face ViT
-CLS). Stage 2 trains two fusion heads with modality dropout - one on
-probabilities only, one on the full feature vector - picks the better on
-dev, and evaluates once on the MELD test split. Modality-dropout plus
-presence flags keep it graceful when a modality is missing (about 8% of
-MELD mid-frames have no detectable face).
+Caches, per utterance: probabilities AND penultimate features from the text
+model (optionally two text backbones, e.g. RoBERTa-large + ModernBERT-large,
+whose probabilities are also reported as an ensemble), the speech-tone model,
+and the face model (probs/features averaged over the 25/50/75% frame crops
+when available). Trains two fusion heads with modality dropout - probs-only
+and full-features - picks the better on dev, and evaluates once on the MELD
+test split. Presence flags keep it graceful when a modality is missing.
 
 Writes models/meld_fusion.pt and models/meld_metrics.json.
 
@@ -19,6 +19,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 import numpy as np
+import soundfile as sf
 import torch
 import torch.nn as nn
 from PIL import Image
@@ -32,57 +33,77 @@ from src.models.audio_sentiment import AudioSentimentModel
 from src.pipelines.train_meld_text import TextClassifier
 
 VAL_MAP = np.array([EMOTION_VALENCE[e] for e in FER_EMOTIONS])
+BATCH = 24
 
 
 @torch.no_grad()
-def extract_split(df, models, device, batch_size=24):
-    text_model, tok, audio_model, fe, face_model, face_tf = models
-    import soundfile as sf
-    acc = {k: [] for k in ("text", "tfeat", "audio", "afeat")}
-    n = len(df)
-    face_probs, face_feats, has_face = None, None, np.zeros(n)
-    for s in range(0, n, batch_size):
-        rows = df.iloc[s:s + batch_size]
-        enc = tok(rows.ctx_text.tolist(), truncation=True, max_length=160,
-                  padding=True, return_tensors="pt")
-        logits, pooled = text_model(enc["input_ids"].to(device),
-                                    enc["attention_mask"].to(device),
-                                    return_features=True)
-        acc["text"].append(torch.softmax(logits, 1).cpu().numpy())
-        acc["tfeat"].append(pooled.float().cpu().numpy())
+def extract_text(df, ckpt, model_name, device, max_len):
+    model = TextClassifier(model_name).to(device).eval()
+    model.load_state_dict(torch.load(ckpt, map_location=device))
+    tok = AutoTokenizer.from_pretrained(model_name)
+    probs, feats = [], []
+    for s in range(0, len(df), BATCH):
+        enc = tok(df.ctx_text.iloc[s:s + BATCH].tolist(), truncation=True,
+                  max_length=max_len, padding=True, return_tensors="pt")
+        logits, pooled = model(enc["input_ids"].to(device),
+                               enc["attention_mask"].to(device),
+                               return_features=True)
+        probs.append(torch.softmax(logits, 1).cpu().numpy())
+        feats.append(pooled.float().cpu().numpy())
+    del model
+    torch.cuda.empty_cache()
+    return np.concatenate(probs), np.concatenate(feats)
 
+
+@torch.no_grad()
+def extract_audio(df, ckpt, model_name, device):
+    model = AudioSentimentModel(model_name=model_name).to(device).eval()
+    model.load_state_dict(torch.load(ckpt, map_location=device))
+    fe = WhisperFeatureExtractor.from_pretrained(model_name)
+    probs, feats = [], []
+    for s in range(0, len(df), BATCH):
         wavs = []
-        for p in rows.wav:
+        for p in df.wav.iloc[s:s + BATCH]:
             wav, _ = sf.read(p, dtype="float32")
             if wav.ndim > 1:
                 wav = wav.mean(axis=1)
             peak = float(np.abs(wav).max())
             wavs.append(wav * (0.95 / peak) if peak > 1e-6 else wav)
         f = fe(wavs, sampling_rate=16000, return_tensors="pt")["input_features"]
-        afeat = audio_model.features(f.to(device))
-        acc["audio"].append(torch.softmax(audio_model.head(afeat), 1).cpu().numpy())
-        acc["afeat"].append(afeat.float().cpu().numpy())
+        af = model.features(f.to(device))
+        probs.append(torch.softmax(model.head(af), 1).cpu().numpy())
+        feats.append(af.float().cpu().numpy())
+    del model
+    torch.cuda.empty_cache()
+    return np.concatenate(probs), np.concatenate(feats)
 
-        imgs, idx = [], []
-        for j, p in enumerate(rows.face):
-            if p:
-                imgs.append(face_tf(Image.open(p).convert("RGB")))
-                idx.append(s + j)
-        if imgs:
-            out = face_model(pixel_values=torch.stack(imgs).to(device),
-                             output_hidden_states=True)
-            fp = torch.softmax(out.logits, 1).cpu().numpy()
-            ff = out.hidden_states[-1][:, 0].float().cpu().numpy()
-            if face_probs is None:
-                face_probs = np.zeros((n, fp.shape[1]))
-                face_feats = np.zeros((n, ff.shape[1]))
-            face_probs[idx], face_feats[idx], has_face[idx] = fp, ff, 1.0
-        if (s // batch_size) % 50 == 0:
-            print(f"  {s}/{n}", flush=True)
-    return {"text": np.concatenate(acc["text"]), "tfeat": np.concatenate(acc["tfeat"]),
-            "audio": np.concatenate(acc["audio"]), "afeat": np.concatenate(acc["afeat"]),
-            "face": face_probs, "ffeat": face_feats, "has_face": has_face,
-            "label": df.label.to_numpy()}
+
+@torch.no_grad()
+def extract_face(df, ckpt, model_name, device, multi):
+    model = AutoModelForImageClassification.from_pretrained(model_name).to(device).eval()
+    model.load_state_dict(torch.load(ckpt, map_location=device))
+    proc = AutoImageProcessor.from_pretrained(model_name)
+    tf = transforms.Compose([transforms.ToTensor(),
+                             transforms.Normalize(proc.image_mean, proc.image_std)])
+    col = "face_multi" if multi else "face"
+    n = len(df)
+    probs, feats, has = np.zeros((n, 7)), None, np.zeros(n)
+    for i, val in enumerate(df[col].tolist()):
+        paths = [p for p in str(val).split(";") if p]
+        if not paths:
+            continue
+        imgs = torch.stack([tf(Image.open(p).convert("RGB")) for p in paths])
+        out = model(pixel_values=imgs.to(device), output_hidden_states=True)
+        if feats is None:
+            feats = np.zeros((n, out.hidden_states[-1].shape[-1]))
+        probs[i] = torch.softmax(out.logits, 1).mean(0).cpu().numpy()
+        feats[i] = out.hidden_states[-1][:, 0].mean(0).float().cpu().numpy()
+        has[i] = 1.0
+        if i % 1000 == 0:
+            print(f"  face {i}/{n}", flush=True)
+    del model
+    torch.cuda.empty_cache()
+    return probs, (feats if feats is not None else np.zeros((n, 768))), has
 
 
 class FusionHead(nn.Module):
@@ -95,15 +116,17 @@ class FusionHead(nn.Module):
         return self.net(x)
 
 
-def pack(feats, with_features, modality_dropout=0.0):
-    blocks = {
-        "t": [feats["text"]] + ([feats["tfeat"]] if with_features else []),
-        "a": [feats["audio"]] + ([feats["afeat"]] if with_features else []),
-        "f": [feats["face"]] + ([feats["ffeat"]] if with_features else []),
-    }
-    blocks = {k: [b.copy() for b in v] for k, v in blocks.items()}
-    n = len(feats["label"])
-    flags = np.stack([np.ones(n), np.ones(n), feats["has_face"].copy()], 1)
+def pack(d, with_features, modality_dropout=0.0):
+    text = [d["text"]] + ([d["tfeat"]] if with_features else [])
+    if "text2" in d:
+        text += [d["text2"]] + ([d["t2feat"]] if with_features else [])
+    blocks = {"t": [b.copy() for b in text],
+              "a": [b.copy() for b in
+                    [d["audio"]] + ([d["afeat"]] if with_features else [])],
+              "f": [b.copy() for b in
+                    [d["face"]] + ([d["ffeat"]] if with_features else [])]}
+    n = len(d["label"])
+    flags = np.stack([np.ones(n), np.ones(n), d["has_face"].copy()], 1)
     if modality_dropout > 0:
         for i, k in enumerate(("t", "a", "f")):
             drop = np.random.rand(n) < modality_dropout
@@ -153,40 +176,46 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--processed", required=True)
     ap.add_argument("--text_ckpt", default="models/meld_text.pt")
-    ap.add_argument("--audio_ckpt", default="models/meld_audio.pt")
-    ap.add_argument("--face_ckpt", default="models/meld_face.pt")
     ap.add_argument("--text_model_name", default="roberta-large")
-    ap.add_argument("--face_model_name", default="trpakov/vit-face-expression")
     ap.add_argument("--context", type=int, default=4)
+    ap.add_argument("--max_len", type=int, default=160)
+    ap.add_argument("--text2_ckpt", default="")
+    ap.add_argument("--text2_model_name", default="answerdotai/ModernBERT-large")
+    ap.add_argument("--text2_context", type=int, default=8)
+    ap.add_argument("--text2_max_len", type=int, default=320)
+    ap.add_argument("--audio_ckpt", default="models/meld_audio.pt")
+    ap.add_argument("--audio_model_name", default="openai/whisper-base")
+    ap.add_argument("--face_ckpt", default="models/meld_face.pt")
+    ap.add_argument("--face_model_name", default="trpakov/vit-face-expression")
+    ap.add_argument("--multi_face", action="store_true")
+    ap.add_argument("--cache_tag", default="v2")
     ap.add_argument("--out", default="models/meld_fusion.pt")
     args = ap.parse_args()
 
     device = torch.device("cuda")
-    cache = {s: os.path.join(args.processed, f"fusion_feats_v2_{s}.npz")
+    cache = {s: os.path.join(args.processed, f"fusion_feats_{args.cache_tag}_{s}.npz")
              for s in ("train", "dev", "test")}
 
-    if not all(os.path.exists(p) for p in cache.values()):
-        text_model = TextClassifier(args.text_model_name).to(device).eval()
-        text_model.load_state_dict(torch.load(args.text_ckpt, map_location=device))
-        tok = AutoTokenizer.from_pretrained(args.text_model_name)
-        audio_model = AudioSentimentModel().to(device).eval()
-        audio_model.load_state_dict(torch.load(args.audio_ckpt, map_location=device))
-        fe = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
-        face_model = AutoModelForImageClassification.from_pretrained(
-            args.face_model_name).to(device).eval()
-        face_model.load_state_dict(torch.load(args.face_ckpt, map_location=device))
-        proc = AutoImageProcessor.from_pretrained(args.face_model_name)
-        face_tf = transforms.Compose(
-            [transforms.ToTensor(),
-             transforms.Normalize(proc.image_mean, proc.image_std)])
-        models = (text_model, tok, audio_model, fe, face_model, face_tf)
-        for split, path in cache.items():
-            print(f"extracting {split} ...", flush=True)
-            feats = extract_split(load_split(args.processed, split,
-                                             context=args.context), models, device)
-            np.savez(path, **feats)
-        del models, text_model, audio_model, face_model
-        torch.cuda.empty_cache()
+    for split, path in cache.items():
+        if os.path.exists(path):
+            continue
+        print(f"extracting {split} ...", flush=True)
+        sep1 = f" {AutoTokenizer.from_pretrained(args.text_model_name).sep_token} "
+        df = load_split(args.processed, split, context=args.context, sep=sep1)
+        feats = {"label": df.label.to_numpy()}
+        feats["text"], feats["tfeat"] = extract_text(
+            df, args.text_ckpt, args.text_model_name, device, args.max_len)
+        if args.text2_ckpt:
+            sep2 = f" {AutoTokenizer.from_pretrained(args.text2_model_name).sep_token} "
+            df2 = load_split(args.processed, split, context=args.text2_context, sep=sep2)
+            assert (df2.key.to_numpy() == df.key.to_numpy()).all()
+            feats["text2"], feats["t2feat"] = extract_text(
+                df2, args.text2_ckpt, args.text2_model_name, device, args.text2_max_len)
+        feats["audio"], feats["afeat"] = extract_audio(
+            df, args.audio_ckpt, args.audio_model_name, device)
+        feats["face"], feats["ffeat"], feats["has_face"] = extract_face(
+            df, args.face_ckpt, args.face_model_name, device, args.multi_face)
+        np.savez(path, **feats)
 
     data = {s: dict(np.load(p)) for s, p in cache.items()}
     y = {s: torch.tensor(d["label"], dtype=torch.long, device=device)
@@ -202,6 +231,10 @@ def main():
     report, d = {}, data["test"]
     labels = d["label"]
     report["text"] = metrics(d["text"].argmax(1), labels)
+    if "text2" in d:
+        report["text2"] = metrics(d["text2"].argmax(1), labels)
+        report["text_ensemble"] = metrics(
+            ((d["text"] + d["text2"]) / 2).argmax(1), labels)
     report["audio"] = metrics(d["audio"].argmax(1), labels)
     m = d["has_face"] == 1
     report["face_valence_on_faces"] = metrics(VAL_MAP[d["face"][m].argmax(1)], labels[m])

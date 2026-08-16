@@ -54,6 +54,7 @@ def forward(model, batch, device):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--processed", required=True)
+    ap.add_argument("--model_name", default="openai/whisper-base")
     ap.add_argument("--init", default="models/audio_sentiment.pt",
                     help="RAVDESS/CREMA-D checkpoint to warm-start from ('' = fresh)")
     ap.add_argument("--batch_size", type=int, default=24)
@@ -67,7 +68,7 @@ def main():
     args = ap.parse_args()
 
     device = torch.device("cuda")
-    fe = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+    fe = WhisperFeatureExtractor.from_pretrained(args.model_name)
     loaders, train_df = [], None
     for split, train in [("train", True), ("dev", False), ("test", False)]:
         df = load_split(args.processed, split)
@@ -77,7 +78,7 @@ def main():
                                   batch_size=args.batch_size, shuffle=train,
                                   num_workers=6, pin_memory=True))
 
-    model = AudioSentimentModel().to(device)
+    model = AudioSentimentModel(model_name=args.model_name).to(device)
     if args.init and os.path.exists(args.init):
         model.load_state_dict(torch.load(args.init, map_location=device))
         print(f"warm-started from {args.init}")
