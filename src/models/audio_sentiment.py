@@ -31,10 +31,13 @@ class AudioSentimentModel(nn.Module):
             nn.Linear(128, num_classes),
         )
 
-    def forward(self, input_features):
+    def features(self, input_features):
         # input_features: (B, n_mels, frames) log-mel from WhisperFeatureExtractor
         out = self.encoder(input_features, output_hidden_states=True)
         stacked = torch.stack(out.hidden_states, dim=0)          # (L+1, B, T, D)
         weights = torch.softmax(self.layer_weights, dim=0)
         mixed = (weights[:, None, None, None] * stacked).sum(0)  # (B, T, D)
-        return self.head(mixed.mean(dim=1))
+        return mixed.mean(dim=1)
+
+    def forward(self, input_features):
+        return self.head(self.features(input_features))

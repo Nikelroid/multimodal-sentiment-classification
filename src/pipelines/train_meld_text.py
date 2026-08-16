@@ -50,12 +50,13 @@ class TextClassifier(nn.Module):
                                   nn.Linear(d, 256), nn.GELU(),
                                   nn.Linear(256, num_classes))
 
-    def forward(self, input_ids, attention_mask):
+    def forward(self, input_ids, attention_mask, return_features=False):
         out = self.backbone(input_ids=input_ids,
                             attention_mask=attention_mask).last_hidden_state
         m = attention_mask.unsqueeze(-1).float()
         pooled = (out * m).sum(1) / m.sum(1).clamp(min=1e-6)
-        return self.head(pooled)
+        logits = self.head(pooled)
+        return (logits, pooled) if return_features else logits
 
 
 def forward(model, batch, device):

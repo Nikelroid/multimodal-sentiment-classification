@@ -73,12 +73,21 @@ def main():
         loaders.append(DataLoader(ds, batch_size=args.batch_size, shuffle=train,
                                   num_workers=6, pin_memory=True))
 
+    # sqrt-inverse-frequency class weights: MELD emotion is heavily neutral
+    # and unweighted training collapses the minority emotions (mF1 ~0.15).
+    import numpy as np
+    counts = np.bincount(loaders[0].dataset.emotions, minlength=7).astype(np.float64)
+    weights = (counts.sum() / (7 * counts.clip(min=1))) ** 0.5
+    weights = torch.tensor(weights / weights.mean(), dtype=torch.float32, device=device)
+    print(f"emotion counts {counts.tolist()} -> weights {[round(w, 2) for w in weights.tolist()]}")
+
     head = list(model.classifier.parameters())
     head_ids = {id(p) for p in head}
     groups = [{"params": [p for p in model.parameters() if id(p) not in head_ids],
                "lr": args.lr},
               {"params": head, "lr": args.head_lr}]
-    fit(model, forward, loaders, groups, args.out, device, epochs=args.epochs)
+    fit(model, forward, loaders, groups, args.out, device, epochs=args.epochs,
+        class_weights=weights)
 
     # Secondary readout: emotion argmax -> valence vs the sentiment label
     # (fixed mapping; the fusion stage learns a better one from the logits).

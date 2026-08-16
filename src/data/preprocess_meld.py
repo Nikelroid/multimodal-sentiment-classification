@@ -110,7 +110,8 @@ def main():
             continue
         rows.append({"key": key, "label": SENTIMENT_LABEL[r.Sentiment.strip().lower()],
                      "sentiment": r.Sentiment.strip().lower(),
-                     "emotion": r.Emotion.strip().lower(), "text": r.Utterance})
+                     "emotion": r.Emotion.strip().lower(),
+                     "speaker": r.Speaker, "text": r.Utterance})
         tasks.append((str(mp4), str(wav_dir / f"{key}.wav"), str(jpg_dir / f"{key}.jpg")))
 
     print(f"{args.split}: {len(tasks)} clips ({missing} listed in CSV but missing on disk)")

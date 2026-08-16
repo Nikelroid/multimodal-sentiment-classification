@@ -58,7 +58,10 @@ def main():
                     help="RAVDESS/CREMA-D checkpoint to warm-start from ('' = fresh)")
     ap.add_argument("--batch_size", type=int, default=24)
     ap.add_argument("--epochs", type=int, default=8)
-    ap.add_argument("--lr", type=float, default=5e-4)
+    ap.add_argument("--lr", type=float, default=2e-4)
+    ap.add_argument("--unfreeze_top", type=int, default=2,
+                    help="also fine-tune the top N Whisper encoder layers at 1e-5")
+    ap.add_argument("--encoder_lr", type=float, default=1e-5)
     ap.add_argument("--weight_power", type=float, default=0.5)
     ap.add_argument("--out", default="models/meld_audio.pt")
     args = ap.parse_args()
@@ -84,8 +87,16 @@ def main():
     weights = torch.tensor(weights / weights.mean(), dtype=torch.float32, device=device)
     print(f"class counts {counts.tolist()} -> loss weights {weights.tolist()}")
 
-    trainable = [p for p in model.parameters() if p.requires_grad]
-    fit(model, forward, loaders, [{"params": trainable, "lr": args.lr}],
+    groups = [{"params": [model.layer_weights, *model.head.parameters()],
+               "lr": args.lr}]
+    if args.unfreeze_top > 0:
+        # Domain adaptation: sitcom audio (laugh track, music, crosstalk) is
+        # far from the acted studio corpora the warm-start saw.
+        top = model.encoder.layers[-args.unfreeze_top:]
+        for p in top.parameters():
+            p.requires_grad = True
+        groups.append({"params": list(top.parameters()), "lr": args.encoder_lr})
+    fit(model, forward, loaders, groups,
         args.out, device, epochs=args.epochs, patience=3, class_weights=weights)
 
 

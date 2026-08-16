@@ -21,8 +21,16 @@ PY=/home1/kelidari/miniconda/envs/ser_env/bin/python
 
 PROC=/scratch1/kelidari/meld/processed
 
-echo "=== 1/4 text (RoBERTa-large + dialogue context) ==="
-$PY -u src/pipelines/train_meld_text.py --processed "$PROC" || exit 1
+echo "=== 0/4 refresh manifests (adds speaker column; media skipped when present) ==="
+for SPLIT in train dev test; do
+  $PY -u src/data/preprocess_meld.py --raw /scratch1/kelidari/meld/MELD.Raw \
+      --extracted /scratch1/kelidari/meld/extracted \
+      --out "$PROC" --split "$SPLIT" --workers 8 || exit 1
+done
+rm -f "$PROC"/fusion_feats_v2_*.npz
+
+echo "=== 1/4 text (RoBERTa-large + speaker-prefixed context) ==="
+$PY -u src/pipelines/train_meld_text.py --processed "$PROC" --context 4 --epochs 8 || exit 1
 
 echo "=== 2/4 face (FER ViT on MELD 7-emotion) ==="
 $PY -u src/pipelines/train_meld_face.py --processed "$PROC" || exit 1

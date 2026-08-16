@@ -34,16 +34,22 @@ def load_split(processed, split, context=2, sep=" </s> "):
     processed = Path(processed)
     df = pd.read_csv(processed / f"manifest_{split}.csv")
     df["text"] = df.text.astype(str).map(_clean_text)
+    if "speaker" not in df.columns:
+        df["speaker"] = ""
+    df["speaker"] = df.speaker.fillna("").astype(str).map(_clean_text)
     df["dia"] = df.key.str.extract(r"dia(\d+)_")[0].astype(int)
     df["utt"] = df.key.str.extract(r"utt(\d+)$")[0].astype(int)
     df = df.sort_values(["dia", "utt"]).reset_index(drop=True)
 
     parts = []
     for _, g in df.groupby("dia", sort=False):
-        texts = g.text.astype(str).tolist()
+        # Speaker-prefixed turns ("Monica: ...") let the encoder track who is
+        # reacting to whom across the context window.
+        turns = [f"{s}: {t}" if s else t
+                 for s, t in zip(g.speaker.tolist(), g.text.astype(str).tolist())]
         g = g.copy()
-        g["ctx_text"] = [sep.join(texts[max(0, i - context):i + 1])
-                         for i in range(len(texts))]
+        g["ctx_text"] = [sep.join(turns[max(0, i - context):i + 1])
+                         for i in range(len(turns))]
         parts.append(g)
     df = pd.concat(parts).reset_index(drop=True)
 
