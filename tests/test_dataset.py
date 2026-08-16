@@ -17,8 +17,15 @@ def test_length_and_sample_keys(fixture_dataset):
     ds = make_dataset(fixture_dataset)
     assert len(ds) == 5
     sample = ds[0]
-    assert set(sample) == {"image", "text", "audio", "label"}
+    assert set(sample) == {"image", "text", "audio", "face", "label"}
     assert sample["label"] in (0, 1, 2)
+    assert sample["face"] is None  # no face_dir configured
+
+
+def test_missing_face_crop_falls_back_to_blank(fixture_dataset):
+    ds = make_dataset(fixture_dataset, face_dir="no/such/dir")
+    face = ds[0]["face"]
+    assert face is not None and face.size == (224, 224)
 
 
 def test_missing_image_falls_back_to_blank(fixture_dataset):
