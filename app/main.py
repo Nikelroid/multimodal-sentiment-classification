@@ -83,8 +83,10 @@ async def predict_sentiment(
         pil_image = Image.open(io.BytesIO(img_bytes)).convert("RGB")
         pixel_values = feature_extractor(images=pil_image, return_tensors="pt")["pixel_values"].to(device)
     else:
-        # Dummy image
-        pixel_values = torch.zeros((1, 3, 224, 224)).to(device)
+        # Blank image through the processor — matches the training-time
+        # missing-image fallback distribution (raw zeros would not).
+        blank = Image.new("RGB", (224, 224))
+        pixel_values = feature_extractor(images=blank, return_tensors="pt")["pixel_values"].to(device)
 
     # 3. Process Audio
     if audio and audio.filename:
@@ -108,7 +110,8 @@ async def predict_sentiment(
         pred_idx = probs.argmax(dim=1).item()
         confidence = probs[0, pred_idx].item()
 
-    classes = ["Negative", "Neutral", "Positive"]
+    # MSCTD label encoding (per the dataset README): neutral: 0, negative: 1, positive: 2
+    classes = ["Neutral", "Negative", "Positive"]
 
     return {"sentiment": classes[pred_idx], "confidence": round(confidence, 4)}
 
