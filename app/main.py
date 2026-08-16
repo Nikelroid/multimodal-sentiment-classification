@@ -17,7 +17,19 @@ from transformers import AutoTokenizer, AutoImageProcessor
 from src.models.multimodal import MultimodalFusionNet
 from src.configs import config
 
+MODEL_PATH = os.getenv("MODEL_PATH", "models/best_multimodal.pt")
+
 app = FastAPI(title="Multimodal Sentiment Analysis")
+
+# Allow the static playground (docs/ on GitHub Pages, or a local file) to call
+# this API from another origin. Demo-friendly; tighten for real deployments.
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["POST", "GET"],
+    allow_headers=["*"],
+)
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
@@ -31,8 +43,13 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Loading models (this might take a few seconds)...")
 
 try:
-    model = MultimodalFusionNet(use_audio=True).to(device)
-    # model.load_state_dict(torch.load("models/best_multimodal.pt", map_location=device))
+    model = MultimodalFusionNet(
+        text_model_name=config.model.text_model_name,
+        vit_model_name=config.model.vision_backbone_name,
+        audio_model_name=config.model.audio_model_name,
+        use_audio=config.model.use_audio,
+    ).to(device)
+    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(config.model.text_model_name)
     feature_extractor = AutoImageProcessor.from_pretrained(config.model.vision_backbone_name)
@@ -56,10 +73,11 @@ async def predict_sentiment(
         return {"sentiment": "Neutral", "confidence": 0.99, "warning": "Model not loaded properly."}
 
     # 1. Process Text
-    inputs = tokenizer(text, return_tensors="pt", max_length=50, truncation=True)
+    inputs = tokenizer(text, return_tensors="pt",
+                       max_length=config.model.max_text_len, truncation=True)
     input_ids = inputs["input_ids"].to(device)
     attention_mask = inputs["attention_mask"].to(device)
-    
+
     # 2. Process Image
     if image and image.filename:
         img_bytes = await image.read()
@@ -89,11 +107,12 @@ async def predict_sentiment(
         probs = torch.softmax(logits, dim=1)
         pred_idx = probs.argmax(dim=1).item()
         confidence = probs[0, pred_idx].item()
-        
+
     classes = ["Negative", "Neutral", "Positive"]
-    
+
     return {"sentiment": classes[pred_idx], "confidence": round(confidence, 4)}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Bind to localhost by default; opt into wider exposure via HOST explicitly.
+    uvicorn.run(app, host=os.getenv("HOST", "127.0.0.1"), port=int(os.getenv("PORT", "8000")))

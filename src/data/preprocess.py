@@ -25,16 +25,6 @@ import emoji
 from PIL import Image
 import numpy as np
 
-# Download required nltk resources
-try:
-    nltk.download('punkt', quiet=True)
-    nltk.download('stopwords', quiet=True)
-    nltk.download('wordnet', quiet=True)
-    nltk.download('omw-1.4', quiet=True)
-    nltk.download('averaged_perceptron_tagger', quiet=True)
-except Exception as e:
-    print(f"NLTK download failed: {e}")
-
 NUM = '<NUM>'
 UNK = '<UNK>'
 

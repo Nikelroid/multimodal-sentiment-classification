@@ -156,9 +156,9 @@ cython_debug/
 # VS Code
 .vscode/
 
-# Project Specific
-data/
-models/
+# Project Specific — anchored to repo root so src/data and src/models stay tracked
+/data/
+/models/
 *.pt
 *.pth
 *.bin
@@ -167,3 +167,6 @@ models/
 slurm/*.out
 slurm/*.err
 [0m
+
+# Aider (AI pair-programming) artifacts
+.aider*

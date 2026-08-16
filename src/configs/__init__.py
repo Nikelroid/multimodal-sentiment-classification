@@ -15,7 +15,11 @@ class GlobalConfig:
         self.training = TrainingConfig()
         self._load_yaml()
 
-    def _load_yaml(self, path="config.yml"):
+    def _load_yaml(self, path=None):
+        # Resolve relative to the repo root so the config loads no matter
+        # which directory the pipeline is launched from.
+        if path is None:
+            path = Path(__file__).resolve().parents[2] / "config.yml"
         if os.path.exists(path):
             with open(path, "r") as f:
                 y = yaml.safe_load(f)

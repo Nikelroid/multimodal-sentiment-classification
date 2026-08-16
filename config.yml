@@ -1,7 +1,7 @@
 # -----------------------------------------------
 # Core Multimodal MLOps Configuration
 # -----------------------------------------------
-# Modifying parameters here will universally sync 
+# Modifying parameters here will universally sync
 # across Dataloaders, Transformers, and Telemetry
 # -----------------------------------------------
 
@@ -9,6 +9,8 @@ training:
   batch_size: 32
   learning_rate: 0.00005
   max_epochs: 10
+  num_workers: 2
+  val_split: 0.1
   project_name: "multimodal-sentiment-classification"
 
 model:
@@ -17,6 +19,7 @@ model:
   audio_model_name: "facebook/wav2vec2-base"
   visualbert_name: "uclanlp/visualbert-nlvr2"
   max_text_len: 50
+  use_audio: false
 
 data:
   dataset_name: "MSCTD"

@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multimodal Sentiment Classification</title>
+<meta name="description" content="Text + vision + audio sentiment classification with RoBERTa, ViT and wav2vec2 fusion.">
+<style>
+  :root {
+    --bg: #fafaf8;
+    --surface: #ffffff;
+    --ink: #17211f;
+    --muted: #5c6a66;
+    --line: #e3e5e0;
+    --accent: #0d7a6c;
+    --accent-soft: #e3f2ef;
+    --neg: #c94f42;
+    --neu: #b98a2e;
+    --pos: #2e8b57;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101413;
+      --surface: #181d1c;
+      --ink: #e8ecea;
+      --muted: #93a19c;
+      --line: #262d2b;
+      --accent: #35b39f;
+      --accent-soft: #16302b;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  header { padding: 72px 0 48px; }
+  .kicker {
+    font: 600 12px/1 var(--mono);
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 { font-size: clamp(28px, 5vw, 42px); line-height: 1.15; margin: 14px 0 12px; letter-spacing: -0.02em; }
+  .lede { color: var(--muted); max-width: 56ch; }
+  .links { margin-top: 22px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 9px 18px; border-radius: 8px;
+    text-decoration: none; font-weight: 600; font-size: 14px;
+    border: 1px solid var(--line); color: var(--ink); background: var(--surface);
+    transition: border-color .15s;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 20px; margin-bottom: 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; margin-bottom: 26px; }
+
+  /* Architecture */
+  .arch { display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+  .modality { flex: 1 1 140px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px 16px; height: 100%;
+  }
+  .card .tag { font: 600 11px/1 var(--mono); color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }
+  .card .name { font-weight: 650; margin: 6px 0 2px; }
+  .card .desc { color: var(--muted); font-size: 13px; }
+  .arrow { align-self: center; color: var(--muted); font-size: 18px; padding: 0 2px; }
+  .fusion .card { background: var(--accent-soft); border-color: transparent; }
+  @media (max-width: 640px) { .arrow { display: none; } .modality { flex-basis: 100%; } }
+
+  /* Playground */
+  .play {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 14px; padding: 26px;
+  }
+  label { display: block; font-weight: 600; font-size: 13px; margin: 18px 0 6px; }
+  label:first-child { margin-top: 0; }
+  .hint { font-weight: 400; color: var(--muted); }
+  textarea, input[type="text"] {
+    width: 100%; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+    font: inherit; resize: vertical;
+  }
+  textarea:focus, input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .chip {
+    font-size: 12.5px; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  }
+  .chip:hover { color: var(--accent); border-color: var(--accent); }
+  .uploads { display: flex; gap: 14px; flex-wrap: wrap; }
+  .uploads > div { flex: 1 1 220px; }
+  input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
+  input[type="file"]::file-selector-button {
+    font: 600 13px system-ui; padding: 7px 14px; margin-right: 10px;
+    border-radius: 8px; border: 1px solid var(--line);
+    background: var(--surface); color: var(--ink); cursor: pointer;
+  }
+  #imgPreview { display: none; margin-top: 10px; max-height: 120px; max-width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+  .row { display: flex; gap: 14px; align-items: end; flex-wrap: wrap; margin-top: 22px; }
+  .row .grow { flex: 1 1 260px; }
+  .row label { margin: 0 0 6px; }
+  button#analyze {
+    padding: 11px 26px; border-radius: 8px; border: none; cursor: pointer;
+    background: var(--accent); color: #fff; font: 600 15px system-ui;
+  }
+  button#analyze:disabled { opacity: .6; cursor: wait; }
+
+  #result { margin-top: 24px; display: none; }
+  .verdict { display: flex; align-items: baseline; gap: 12px; }
+  .verdict .label { font-size: 26px; font-weight: 700; }
+  .verdict .conf { color: var(--muted); font-size: 14px; }
+  .meter {
+    height: 8px; border-radius: 999px; background: var(--line);
+    margin-top: 12px; overflow: hidden;
+  }
+  .meter > div { height: 100%; width: 0; border-radius: 999px; transition: width .5s ease; }
+  .note { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+  #offline { margin-top: 24px; display: none; }
+  .offline-box {
+    border: 1px dashed var(--line); border-radius: 10px; padding: 18px;
+    font-size: 14px; color: var(--muted);
+  }
+  pre {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; margin-top: 10px; overflow-x: auto;
+    font: 12.5px/1.7 var(--mono); color: var(--ink);
+  }
+
+  footer { padding: 40px 0 60px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="kicker">Deep Learning · Multimodal Fusion</div>
+    <h1>Multimodal Sentiment Classification</h1>
+    <p class="lede">
+      One model, three senses. Text, image, and audio are encoded by
+      RoBERTa, ViT, and wav2vec2, fused into a single representation, and
+      classified into negative, neutral, or positive sentiment — trained on the
+      MSCTD dialogue dataset.
+    </p>
+    <div class="links">
+      <a class="btn primary" href="https://github.com/Nikelroid/multimodal-sentiment-classification">View source on GitHub</a>
+      <a class="btn" href="#playground">Try the playground</a>
+    </div>
+  </header>
+
+  <section>
+    <h2>Architecture</h2>
+    <p class="sub">Late fusion of frozen-vocabulary transformer encoders with a compact MLP head.</p>
+    <div class="arch">
+      <div class="modality"><div class="card">
+        <div class="tag">Text</div>
+        <div class="name">RoBERTa-base</div>
+        <div class="desc">Pooled sentence embedding, 768-d</div>
+      </div></div>
+      <div class="modality"><div class="card">
+        <div class="tag">Vision</div>
+        <div class="name">ViT-B/16</div>
+        <div class="desc">Scene embedding from the frame, 768-d</div>
+      </div></div>
+      <div class="modality"><div class="card">
+        <div class="tag">Audio</div>
+        <div class="name">wav2vec2-base</div>
+        <div class="desc">Mean-pooled waveform features, optional</div>
+      </div></div>
+      <div class="arrow">→</div>
+      <div class="modality fusion"><div class="card">
+        <div class="tag">Fusion</div>
+        <div class="name">Concat → MLP</div>
+        <div class="desc">Negative · Neutral · Positive</div>
+      </div></div>
+    </div>
+  </section>
+
+  <section id="playground">
+    <h2>Playground</h2>
+    <p class="sub">
+      Runs against your own inference server — nothing is uploaded anywhere else.
+      Start it locally, then analyze anything.
+    </p>
+
+    <div class="play">
+      <label for="text">Text <span class="hint">— required</span></label>
+      <textarea id="text" rows="3" placeholder="Type a sentence, a line of dialogue, a review…"></textarea>
+      <div class="chips">
+        <span class="chip">This is the best day of my whole life!</span>
+        <span class="chip">The package arrived broken and nobody answers my emails.</span>
+        <span class="chip">The meeting was moved to Thursday afternoon.</span>
+      </div>
+
+      <label style="margin-top:22px">Optional modalities</label>
+      <div class="uploads">
+        <div>
+          <span class="hint">Image (jpg/png)</span>
+          <input type="file" id="image" accept="image/*">
+          <img id="imgPreview" alt="preview">
+        </div>
+        <div>
+          <span class="hint">Audio (wav)</span>
+          <input type="file" id="audio" accept="audio/*">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="grow">
+          <label for="api">API endpoint</label>
+          <input type="text" id="api" value="http://localhost:8000">
+        </div>
+        <button id="analyze">Analyze sentiment</button>
+      </div>
+
+      <div id="result">
+        <div class="verdict">
+          <span class="label" id="verdictLabel"></span>
+          <span class="conf" id="verdictConf"></span>
+        </div>
+        <div class="meter"><div id="meterBar"></div></div>
+        <div class="note" id="resultNote"></div>
+      </div>
+
+      <div id="offline">
+        <div class="offline-box">
+          <strong>Couldn't reach the API.</strong> Start the inference server on your machine,
+          then try again:
+          <pre>git clone https://github.com/Nikelroid/multimodal-sentiment-classification
+cd multimodal-sentiment-classification
+pip install -r requirements.txt
+uvicorn app.main:app --port 8000</pre>
+          The playground talks only to the endpoint above — your inputs never leave your machine.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Built by <a href="https://github.com/Nikelroid">Nima Kelidari</a> ·
+    MSCTD dataset · PyTorch + Hugging Face Transformers + FastAPI
+  </footer>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const COLORS = { Negative: "var(--neg)", Neutral: "var(--neu)", Positive: "var(--pos)" };
+
+  document.querySelectorAll(".chip").forEach((chip) => {
+    chip.addEventListener("click", () => { $("text").value = chip.textContent; });
+  });
+
+  $("image").addEventListener("change", () => {
+    const f = $("image").files[0];
+    const img = $("imgPreview");
+    if (f) { img.src = URL.createObjectURL(f); img.style.display = "block"; }
+    else { img.style.display = "none"; }
+  });
+
+  $("analyze").addEventListener("click", async () => {
+    const text = $("text").value.trim();
+    if (!text) { $("text").focus(); return; }
+
+    const btn = $("analyze");
+    btn.disabled = true; btn.textContent = "Analyzing…";
+    $("result").style.display = "none";
+    $("offline").style.display = "none";
+
+    const form = new FormData();
+    form.append("text", text);
+    if ($("image").files[0]) form.append("image", $("image").files[0]);
+    if ($("audio").files[0]) form.append("audio", $("audio").files[0]);
+
+    const base = $("api").value.trim().replace(/\/+$/, "");
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      const res = await fetch(base + "/predict", { method: "POST", body: form, signal: controller.signal });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+
+      const label = data.sentiment ?? "?";
+      const conf = typeof data.confidence === "number" ? data.confidence : 0;
+      $("verdictLabel").textContent = label;
+      $("verdictLabel").style.color = COLORS[label] || "var(--ink)";
+      $("verdictConf").textContent = (conf * 100).toFixed(1) + "% confidence";
+      const bar = $("meterBar");
+      bar.style.background = COLORS[label] || "var(--accent)";
+      bar.style.width = "0";
+      $("resultNote").textContent = data.warning ? "⚠ " + data.warning : "";
+      $("result").style.display = "block";
+      requestAnimationFrame(() => { bar.style.width = Math.max(4, conf * 100) + "%"; });
+    } catch (err) {
+      $("offline").style.display = "block";
+    } finally {
+      btn.disabled = false; btn.textContent = "Analyze sentiment";
+    }
+  });
+</script>
+
+</body>
+</html>

@@ -7,3 +7,4 @@ class ModelConfig:
     audio_model_name: str = "facebook/wav2vec2-base" # Standard audio processor
     visualbert_name: str = "uclanlp/visualbert-nlvr2"
     max_text_len: int = 50
+    use_audio: bool = False  # MSCTD ships no audio; enable only when an audio dir is populated

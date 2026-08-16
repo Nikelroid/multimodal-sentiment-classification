@@ -9,6 +9,7 @@ class DataConfig:
     data_dir: Path = None
     msctd_dir: Path = None
     instany_dir: Path = None
+    dataset_name: str = "MSCTD"
 
     def __post_init__(self):
         # Resolve data_dir
@@ -16,7 +17,7 @@ class DataConfig:
             self.data_dir = self.base_dir / "data"
         elif isinstance(self.data_dir, str):
             self.data_dir = Path(self.data_dir)
-            
+
         # Dynamically map sub-datasets
         self.msctd_dir = self.data_dir / "MSCTD"
         self.instany_dir = self.data_dir / "InstaNY100K"
