@@ -469,12 +469,16 @@ uvicorn app.main:app --port 8000</pre>
       const bar = $("meterBar");
       bar.style.background = COLORS[label] || "var(--accent)";
       bar.style.width = "0";
-      let note = data.warning ? "⚠ " + data.warning : "";
+      const pct = (p) => p ? `Neu ${p.Neutral}% · Neg ${p.Negative}% · Pos ${p.Positive}%` : "";
+      const lines = [];
+      if (data.probabilities) lines.push(`fused: ${pct(data.probabilities)}`);
       if (data.components) {
-        note = `text+image read: ${data.components.text_image} · voice tone read: ${data.components.voice_tone}` +
-               (note ? " · " + note : "");
+        const t = data.components.text_image, v = data.components.voice_tone;
+        if (t) lines.push(`text+image → ${t.label} (${pct(t.probabilities)})`);
+        if (v) lines.push(`voice tone → ${v.label} (${pct(v.probabilities)})`);
       }
-      $("resultNote").textContent = note;
+      if (data.warning) lines.push("⚠ " + data.warning);
+      $("resultNote").innerHTML = lines.join("<br>");
       $("result").style.display = "block";
       requestAnimationFrame(() => { bar.style.width = Math.max(4, conf * 100) + "%"; });
     } catch (err) {

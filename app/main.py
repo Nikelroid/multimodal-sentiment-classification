@@ -159,6 +159,11 @@ async def predict_sentiment(
     # MSCTD label encoding (per the dataset README): neutral: 0, negative: 1, positive: 2
     classes = ["Neutral", "Negative", "Positive"]
 
+    def as_pct(p):
+        return {c: round(float(p[i]) * 100, 1) for i, c in enumerate(classes)}
+
+    has_real_image = bool(image and image.filename)
+
     # Prediction (text + image + optional face)
     with torch.no_grad():
         logits = model(input_ids, attention_mask, pixel_values, audio_values, face_values)
@@ -180,23 +185,29 @@ async def predict_sentiment(
         with torch.no_grad():
             audio_probs = torch.softmax(audio_model(feats), dim=1)[0]
 
-        def certainty(p):
-            entropy = -(p * (p + 1e-9).log()).sum()
-            return float(1 - entropy / torch.log(torch.tensor(float(len(p)))))
-
-        prior_mm = 0.6 if text.strip() else 0.35   # voice leads when there is no text
-        w_mm = prior_mm * certainty(probs)
-        w_audio = (1 - prior_mm) * certainty(audio_probs)
-        total = w_mm + w_audio + 1e-9
         result["components"] = {
-            "text_image": classes[probs.argmax().item()],
-            "voice_tone": classes[audio_probs.argmax().item()],
+            "text_image": {"label": classes[probs.argmax().item()], "probabilities": as_pct(probs)},
+            "voice_tone": {"label": classes[audio_probs.argmax().item()], "probabilities": as_pct(audio_probs)},
         }
-        probs = (w_mm * probs + w_audio * audio_probs) / total
+
+        if not text.strip() and not has_real_image:
+            # Voice-only request: the fusion model would contribute nothing but
+            # its blank-input prior (heavily Neutral) - use the voice read alone.
+            probs = audio_probs
+        else:
+            def certainty(p):
+                entropy = -(p * (p + 1e-9).log()).sum()
+                return float(1 - entropy / torch.log(torch.tensor(float(len(p)))))
+
+            prior_mm = 0.6 if text.strip() else 0.35   # voice leads when there is no text
+            w_mm = prior_mm * certainty(probs)
+            w_audio = (1 - prior_mm) * certainty(audio_probs)
+            probs = (w_mm * probs + w_audio * audio_probs) / (w_mm + w_audio + 1e-9)
 
     pred_idx = probs.argmax().item()
     result.update({"sentiment": classes[pred_idx],
-                   "confidence": round(probs[pred_idx].item(), 4)})
+                   "confidence": round(probs[pred_idx].item(), 4),
+                   "probabilities": as_pct(probs)})
     return result
 
 if __name__ == "__main__":
