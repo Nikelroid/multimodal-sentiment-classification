@@ -87,10 +87,14 @@ def main():
     args = ap.parse_args()
 
     csv_name, video_dir = SPLITS[args.split]
+    # dev/test CSVs ship in MELD.Raw; the train CSV ships inside train.tar.gz
+    # and lands in the extraction dir.
+    candidates = [Path(args.raw) / csv_name, Path(args.extracted) / csv_name]
+    csv_path = next(p for p in candidates if p.exists())
     try:
-        df = pd.read_csv(Path(args.raw) / csv_name)
+        df = pd.read_csv(csv_path)
     except UnicodeDecodeError:
-        df = pd.read_csv(Path(args.raw) / csv_name, encoding="latin-1")
+        df = pd.read_csv(csv_path, encoding="latin-1")
 
     out = Path(args.out)
     wav_dir, jpg_dir = out / "audio" / args.split, out / "frames" / args.split
