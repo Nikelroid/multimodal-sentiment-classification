@@ -185,13 +185,13 @@
     <div class="arch">
       <div class="modality"><div class="card">
         <div class="tag">Text</div>
-        <div class="name">RoBERTa-base</div>
-        <div class="desc">Pooled sentence embedding, 768-d</div>
+        <div class="name">RoBERTa-large</div>
+        <div class="desc">Mean-pooled sentence embedding, 1024-d</div>
       </div></div>
       <div class="modality"><div class="card">
         <div class="tag">Vision</div>
-        <div class="name">ViT-B/16</div>
-        <div class="desc">Scene embedding from the frame, 768-d</div>
+        <div class="name">DINOv2-large</div>
+        <div class="desc">Scene embedding from the frame, 1024-d</div>
       </div></div>
       <div class="modality"><div class="card">
         <div class="tag">Audio</div>
@@ -215,7 +215,7 @@
     </p>
 
     <div class="play">
-      <label for="text">Text <span class="hint">— required</span></label>
+      <label for="text">Text <span class="hint">— optional when an image or audio is provided</span></label>
       <textarea id="text" rows="3" placeholder="Type a sentence, a line of dialogue, a review…"></textarea>
       <div class="chips">
         <span class="chip">This is the best day of my whole life!</span>
@@ -436,7 +436,9 @@ uvicorn app.main:app --port 8000</pre>
 
   $("analyze").addEventListener("click", async () => {
     const text = $("text").value.trim();
-    if (!text) { $("text").focus(); return; }
+    const hasImage = capturedImage || $("image").files[0];
+    const hasAudio = capturedAudio || $("audio").files[0];
+    if (!text && !hasImage && !hasAudio) { $("text").focus(); return; }
 
     const btn = $("analyze");
     btn.disabled = true; btn.textContent = "Analyzing…";

@@ -63,7 +63,7 @@ async def home(request: Request):
 
 @app.post("/predict")
 async def predict_sentiment(
-    text: str = Form(...),
+    text: str = Form(""),
     image: UploadFile = File(None),
     audio: UploadFile = File(None)
 ):

@@ -7,8 +7,8 @@
 
 training:
   batch_size: 32
-  learning_rate: 0.00001   # backbone LR (large pretrained encoders want small steps)
-  head_lr: 0.001           # fusion head is trained from scratch
+  learning_rate: 0.00002   # backbone LR (large pretrained encoders want small steps)
+  head_lr: 0.0005          # fusion head is trained from scratch
   weight_decay: 0.01
   warmup_ratio: 0.06
   label_smoothing: 0.1

@@ -170,3 +170,4 @@ slurm/*.err
 
 # Aider (AI pair-programming) artifacts
 .aider*
+wandb/
