@@ -4,12 +4,43 @@
 [![Live Demo](https://img.shields.io/badge/demo-live-brightgreen)](https://kelidari.com/multimodal-sentiment-classification/)
 
 End-to-end MLOps repository for predicting sentiment (Negative / Neutral / Positive)
-from multimodal inputs — text, image, and optional audio — trained on the MSCTD
-dialogue dataset. Covers the full lifecycle: data ingestion, GPU training with a
-modern fine-tuning recipe, tested pipelines under CI, containerized serving, and a
-live browser playground with webcam and voice capture.
+from multimodal inputs — text, image, and voice. Covers the full lifecycle: data
+ingestion, GPU training with a modern fine-tuning recipe, tested pipelines under CI,
+containerized serving, and a live browser playground with webcam and voice capture.
+Benchmarked tri-modally on **MELD**; the original MSCTD experiments are kept below
+as the motivating data-bottleneck study.
 
 **Live demo:** <https://kelidari.com/multimodal-sentiment-classification/>
+
+## 🏆 Results (MELD test split, n=2,607)
+
+**74.5% accuracy / 0.743 weighted-F1 — tri-modal late fusion on the standard MELD
+sentiment benchmark, at the level of published multimodal systems.** The same
+task capped at 63% in 2022 on MSCTD data; swapping the data and iterating with
+diagnosed fixes bought **+11.5 points** with the same class of models.
+
+![MELD results: per-modality accuracy and the 63→74.5 progression](images/meld_results.png)
+
+Per-utterance 3-class sentiment (weighted-F1 is the conventional reporting
+metric):
+
+| Model | Test acc | Weighted-F1 | Macro-F1 |
+|---|---|---|---|
+| Text — RoBERTa-large, speaker-prefixed 4-turn context | 73.0% | 0.730 | 0.713 |
+| Text — ModernBERT-large, 8-turn context | 72.0% | 0.717 | 0.694 |
+| Text — two-backbone ensemble | 74.0% | 0.738 | 0.719 |
+| Voice — Whisper-small layer-mix, warm-started on RAVDESS+CREMA-D | 59.6% | 0.592 | 0.563 |
+| Face — FER ViT fine-tuned on MELD, 3-frame voting (98.5% coverage) | 46.5%* | 0.425* | — |
+| **Late fusion (modality dropout, dev-selected head)** | **74.5%** | **0.743** | **0.725** |
+
+\* face-only, on utterances with a detected face; MELD's visual channel is the
+weakest in the literature as well (the largest face in frame is often not the
+labeled speaker).
+
+Progression across the three training rounds — each step from a diagnosed cause,
+not a sweep: **70.1% → 73.2% → 74.5%** fused accuracy (speaker-context text,
+audio LR + encoder unfreezing, class-weighted faces, backbone ensembling,
+multi-frame face voting). Full numbers: [`models/meld_metrics.json`](models/meld_metrics.json).
 
 ## 📊 Results (MSCTD test split, n=5,067)
 
