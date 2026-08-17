@@ -319,11 +319,15 @@ uvicorn app.main:app --port 8000</pre>
     $("modeCloud").classList.toggle("active", mode === "cloud");
     $("modeLocal").classList.toggle("active", mode !== "cloud");
     if (mode === "cloud") {
+      // Keep the hosted endpoint out of the visible UI (and screenshots);
+      // it still lives in this file for anyone reading the source.
       $("api").value = CLOUD_API;
       $("api").readOnly = true;
+      $("api").style.display = "none";
     } else {
       $("api").value = localStorage.getItem("custom_api") || LOCAL_DEFAULT;
       $("api").readOnly = false;
+      $("api").style.display = "";
     }
   }
   $("modeCloud").addEventListener("click", () => setMode("cloud"));
