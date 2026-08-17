@@ -15,5 +15,9 @@ numpy
 pyyaml
 scipy
 soundfile
+# facenet-pytorch is installed --no-deps (it pins torch<2.3); these are its
+# remaining runtime deps. transformers 5.x no longer pulls in requests.
+requests
+tqdm
 sentencepiece
 protobuf
