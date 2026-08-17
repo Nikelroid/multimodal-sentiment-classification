@@ -64,7 +64,7 @@ else:
 
 # Optional face-expression branch: detect the largest face at inference and
 # feed the crop to the fusion model (mirrors training-time precomputed crops).
-face_processor, mtcnn = None, None
+face_processor, mtcnn, face_error = None, None, None
 if model is not None and config.model.use_face:
     try:
         from facenet_pytorch import MTCNN
@@ -72,7 +72,8 @@ if model is not None and config.model.use_face:
         mtcnn = MTCNN(select_largest=True, post_process=False, device=str(device))
         print("Face branch enabled.")
     except Exception as e:
-        print(f"Face branch disabled ({e}).")
+        face_error = f"{type(e).__name__}: {e}"[:300]
+        print(f"Face branch disabled ({face_error}).")
         mtcnn = None
 
 # Direct facial-expression head: the face backbone is a ViT fine-tuned on
@@ -304,8 +305,11 @@ async def predict_sentiment(
     if has_real_image and mtcnn is not None:
         result["face_detected"] = face_values is not None
     elif has_real_image and config.model.use_face and mtcnn is None:
-        result["face_note"] = ("face detector not installed on this server - "
-                               "pip install --no-deps facenet-pytorch and restart")
+        # Surface the actual startup failure so remote deploys are diagnosable
+        # through the API alone (mirrors load_error for the fusion model).
+        result["face_note"] = f"face branch failed at startup - {face_error}" \
+            if face_error else ("face detector not installed on this server - "
+                                "pip install --no-deps facenet-pytorch and restart")
 
     pred_idx = probs.argmax().item()
     result.update({"sentiment": classes[pred_idx],
