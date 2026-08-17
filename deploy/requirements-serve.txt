@@ -2,7 +2,10 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.5.1
 torchvision==0.20.1
-transformers>=4.46
+# Pinned to the training env: checkpoints are raw state_dicts, and newer
+# transformers renamed ViT attention internals (q_proj/k_proj vs query/key),
+# which breaks load_state_dict with "Missing key(s): ...q_proj..."
+transformers==5.6.2
 fastapi
 uvicorn
 python-multipart
