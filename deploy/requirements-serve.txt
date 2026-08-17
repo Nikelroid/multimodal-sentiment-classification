@@ -10,6 +10,7 @@ jinja2
 pillow
 numpy
 pyyaml
+scipy
 soundfile
 sentencepiece
 protobuf

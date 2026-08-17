@@ -14,7 +14,7 @@ COPY src/ src/
 COPY app/ app/
 COPY models/best_multimodal.pt models/best_multimodal.pt
 COPY models/audio_sentiment.pt models/audio_sentiment.pt
-COPY models/voice_calibration.json models/voice_calibration.json
+COPY models/voice_calibration.json models/face_calibration.json models/
 
 ENV HF_HOME=/srv/.hf
 # Bake the backbone weights into the image so cold starts don't hit the Hub.
