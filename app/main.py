@@ -224,19 +224,16 @@ async def predict_sentiment(
         # Fallback: hand rule tuned via env knobs.
         raw_audio_probs = audio_probs.clone()
         calib_path = os.getenv("VOICE_CALIBRATION", "models/voice_calibration.json")
-        if os.path.exists(calib_path) and raw_audio_probs[0] >= 0.60:
-            # The personal calibration is fitted on neutral-dominant
-            # conversational speech; only apply it in that regime. When the
-            # raw model is already decisive, amplifying small deviations
-            # just flips clearly-expressive audio to the wrong class.
+        if os.path.exists(calib_path):
+            # Per-user transform fitted from a docs/lab.html session recorded
+            # through THIS loudness pipeline (owner's fit: 96.7% LOO over 60
+            # takes vs 88.3% raw). Delete the file to serve raw model output.
             import json
             calib = json.load(open(calib_path))
             W = torch.tensor(calib["W"], dtype=audio_probs.dtype, device=audio_probs.device)
             b = torch.tensor(calib["b"], dtype=audio_probs.dtype, device=audio_probs.device)
             # eps must match the fitting code (log(p + 1e-4))
             audio_probs = torch.softmax(W @ torch.log(audio_probs + 1e-4) + b, dim=0)
-        elif os.path.exists(calib_path):
-            pass  # decisive raw read - trust the model
         else:
             # Opt-in only: this hand rule (like the old calibration) was tuned
             # against the pre-fix loudness pipeline. With loudness-matched
