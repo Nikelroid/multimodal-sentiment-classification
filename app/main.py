@@ -173,8 +173,12 @@ async def predict_sentiment(
         if len(waveform.shape) > 1:
             waveform = waveform.mean(axis=1)
         if sr != 16000:
-            import librosa  # optional dep; only needed to resample non-16kHz uploads
-            waveform = librosa.resample(waveform, orig_sr=sr, target_sr=16000)
+            # scipy ships with the core deps (browsers record 44.1/48 kHz,
+            # so this path runs for nearly every mic upload)
+            from math import gcd
+            from scipy.signal import resample_poly
+            g = gcd(int(sr), 16000)
+            waveform = resample_poly(waveform, 16000 // g, sr // g)
         waveform_np = waveform.astype("float32")
         audio_values = torch.tensor(waveform_np).unsqueeze(0).to(device)
     else:
@@ -199,11 +203,14 @@ async def predict_sentiment(
     # component's prior is scaled by its certainty (1 - normalized entropy),
     # so a confident voice read outweighs an unsure text read and vice versa.
     if waveform_np is not None and audio_model is not None:
-        # Peak-normalize: consumer-mic recordings are far quieter than the
-        # loudness-normalized studio clips the model trained on.
+        # Loudness-match the training corpora: their native peaks sit around
+        # 0.04-1.0 (median ~0.14) and augmentation only made clips quieter,
+        # so anything near digital full scale is louder than the model ever
+        # saw and reads as negative prosody. 0.15 scored best on a held-out
+        # clip battery; 0.95 flipped clean happy clips to Negative.
         peak = float(abs(waveform_np).max())
         if peak > 1e-6:
-            waveform_np = waveform_np * (0.95 / peak)
+            waveform_np = waveform_np * (0.15 / peak)
         feats = audio_fe(waveform_np, sampling_rate=16000,
                          return_tensors="pt")["input_features"].to(device)
         with torch.no_grad():
@@ -217,15 +224,24 @@ async def predict_sentiment(
         # Fallback: hand rule tuned via env knobs.
         raw_audio_probs = audio_probs.clone()
         calib_path = os.getenv("VOICE_CALIBRATION", "models/voice_calibration.json")
-        if os.path.exists(calib_path):
+        if os.path.exists(calib_path) and raw_audio_probs[0] >= 0.60:
+            # The personal calibration is fitted on neutral-dominant
+            # conversational speech; only apply it in that regime. When the
+            # raw model is already decisive, amplifying small deviations
+            # just flips clearly-expressive audio to the wrong class.
             import json
             calib = json.load(open(calib_path))
             W = torch.tensor(calib["W"], dtype=audio_probs.dtype, device=audio_probs.device)
             b = torch.tensor(calib["b"], dtype=audio_probs.dtype, device=audio_probs.device)
             # eps must match the fitting code (log(p + 1e-4))
             audio_probs = torch.softmax(W @ torch.log(audio_probs + 1e-4) + b, dim=0)
+        elif os.path.exists(calib_path):
+            pass  # decisive raw read - trust the model
         else:
-            cutoff = float(os.getenv("VOICE_NEUTRAL_CUTOFF", "0.85"))
+            # Opt-in only: this hand rule (like the old calibration) was tuned
+            # against the pre-fix loudness pipeline. With loudness-matched
+            # input the raw model needs no correction.
+            cutoff = float(os.getenv("VOICE_NEUTRAL_CUTOFF", "0"))
             damp = float(os.getenv("VOICE_NEUTRAL_DAMP", "0.3"))
             boost = float(os.getenv("VOICE_POSITIVE_BOOST", "2.2"))
             if audio_probs[0] < cutoff:
